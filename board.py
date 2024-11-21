@@ -314,7 +314,7 @@ class Board:
         233
         """
         seen = set()  # Do not yield the same board twice
-        
+
         if self.is_solved():
             return
 
