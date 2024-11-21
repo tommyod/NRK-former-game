@@ -90,7 +90,7 @@ import random
 import itertools
 import functools
 
-from nrk_game_board import Board, LabelInvariantBoard
+from board import Board, LabelInvariantBoard
 
 
 def best_first_search(board: Board, power=None, seed=None):
