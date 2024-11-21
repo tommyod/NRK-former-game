@@ -65,6 +65,7 @@ Heuristic search
 >>> solutions = heuristic_search(board)
 >>> for moves in solutions:
 ...     print(moves)
+[(0, 0), (1, 0), (2, 2), (2, 1)]
 [(0, 0), (2, 1), (1, 0)]
 
 >>> board = Board([[1, 4, 4, 3],
@@ -74,6 +75,8 @@ Heuristic search
 ...                [3, 1, 1, 3]])
 >>> for moves in heuristic_search(board):
 ...     print(moves)
+[(0, 1), (1, 2), (2, 0), (4, 0), (4, 3), (4, 3), (4, 3)]
+[(0, 1), (1, 2), (2, 0), (4, 0), (3, 3), (3, 3)]
 [(1, 2), (0, 1), (2, 0), (4, 0), (3, 3)]
 >>> len(moves) == len(a_star_search(board))
 True
