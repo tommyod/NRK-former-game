@@ -123,7 +123,8 @@ In the long run it produces a solution, but again you might run out of memory.
 >>> for moves in monte_carlo_search(board, seed=1):
 ...    print(f"Found solution of length {len(moves)}: {moves}")
 Found solution of length 8: [(2, 1), (2, 2), (2, 2), (2, 1), (2, 1), (2, 0), (2, 0), (2, 0)]
-Found solution of length 5: [(1, 1), (1, 0), (1, 0), (1, 2), (2, 0)]
+Found solution of length 6: [(1, 1), (1, 1), (1, 2), (1, 0), (2, 0), (2, 0)]
+Found solution of length 5: [(1, 1), (2, 0), (2, 0), (2, 0), (2, 2)]
 Found solution of length 4: [(2, 0), (1, 1), (1, 0), (1, 2)]
 
 ```
