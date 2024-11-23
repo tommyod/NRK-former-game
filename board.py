@@ -386,6 +386,7 @@ class Board:
 
         return self
 
+    @functools.cache
     def is_solved(self) -> bool:
         """Check if the board is cleared (all cells are zero)."""
         # Only need to check bottom row because of gravity
@@ -636,14 +637,14 @@ class CanonicalBoard(Board):
     def canonicalize(self):
         return Board(self.grid).canonicalize()
 
-    def children(self, return_removed=False):
+    def children(self, return_removed=False, return_flip=False):
         """Yields (move, flip, board) for all children boards.
         To get the new board, apply the move, then flip it.
 
         Examples
         --------
         >>> board = CanonicalBoard([[1, 2, 3], [1, 3, 2]])
-        >>> for move, flip, child in board.children():
+        >>> for move, child, flip in board.children(return_flip=True):
         ...     print(move, flip)
         ...     print(board)
         (0, 0) False
@@ -668,16 +669,23 @@ class CanonicalBoard(Board):
         for i, j in non_canonical_board.yield_clicks():
             board, num_removed = non_canonical_board.click(i, j, return_removed=True)
 
+            # TODO: To recover solution path, flips must be taken into account.
+            # This is not implemented
             board, flip = board.canonicalize(was_flipped=True)
             # j = self.cols - j - 1 if flip else j
 
             if board in seen:
                 continue
             else:
-                if return_removed:
-                    (i, j), flip, type(self)(board.grid), num_removed
+                if return_removed and return_flip:
+                    yield (i, j), type(self)(board.grid), num_removed, flip
+                elif return_removed and not return_flip:
+                    yield (i, j), type(self)(board.grid), num_removed
+                elif not return_removed and return_flip:
+                    yield (i, j), type(self)(board.grid), flip
                 else:
-                    yield (i, j), flip, type(self)(board.grid)
+                    yield (i, j), type(self)(board.grid)
+
                 seen.add(board)
 
 
