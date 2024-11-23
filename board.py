@@ -346,7 +346,7 @@ class Board:
 
     def _apply_move(self, i: int, j: int):
         """Apply move and gravity, modifies the board in place."""
-        connected = self._find_connected(i, j, color=self.grid[i][j], visited=set())
+        connected = self._find_connected(i, j, value=self.grid[i][j], visited=set())
 
         # Remove connected cells
         for row, col in connected:
@@ -357,22 +357,22 @@ class Board:
         return self, len(connected)
 
     def _find_connected(
-        self, i: int, j: int, color: int, visited: Set[Tuple[int, int]]
+        self, i: int, j: int, value: int, visited: Set[Tuple[int, int]]
     ) -> Set[Tuple[int, int]]:
-        """Find all cells connected to (i,j) with the same color."""
+        """Find all cells connected to (i,j) with the same value."""
         outside = not (0 <= i < self.rows and 0 <= j < self.cols)
 
-        if outside or ((i, j) in visited) or (self.grid[i][j] != color):
+        if outside or ((i, j) in visited) or (self.grid[i][j] != value):
             return visited
 
         visited.add((i, j))
         for di, dj in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
             # Recursive call, which updates the `visisted` argument
-            self._find_connected(i + di, j + dj, color, visited)
+            self._find_connected(i + di, j + dj, value, visited)
         return visited
 
     def _apply_gravity(self, grid: List[List[int]]):
-        """Make cells fall down to fill empty spaces,
+        """Make cells fall down to fill cleared spaces,
         modifying the board in place."""
 
         for j in range(self.cols):
@@ -394,7 +394,7 @@ class Board:
         return all(cell == 0 for cell in self.grid[-1])
 
     def remaining(self) -> int:
-        """Count number of remaining non-zero cells.
+        """Count number of remaining non-cleared (non-zero) cells.
 
         Examples
         --------
@@ -451,13 +451,6 @@ class Board:
     def plot(self, ax=None, click=None, n_colors=None, show_values=False):
         """Plot the current board state using matplotlib.
 
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            The axis to plot on. If None, creates a new figure and axis.
-        click : tuple(int, int), optional
-            If provided, marks the position (i,j) with an X.
-
         Returns
         -------
         matplotlib.axes.Axes
@@ -486,7 +479,7 @@ class Board:
         unique_numbers = sorted(set(num for row in self.grid for num in row if num > 0))
         n_colors = len(unique_numbers) if n_colors is None else n_colors
         color_map = {i: plt.cm.Set3.colors[i % 12] for i in range(1, n_colors + 1)}
-        color_map[0] = "white"  # Empty cells are white
+        color_map[0] = "white"  # Cleared cells are white
 
         # Create the grid
         for i in range(self.rows):
