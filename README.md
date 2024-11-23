@@ -69,6 +69,7 @@ All children (results of all valid clicks) can be retrieved:
 ## The solvers
 
 **Best first search** chooses the move that clears the most cells.
+There are no guarantees that this results in an optimal solution.
 
 ```pycon
 >>> from solvers import best_first_search
@@ -93,11 +94,36 @@ A better heuristic could help---make a PR if you have an idea!
 >>> moves = a_star_search(board)
 >>> moves
 [(1, 1), (2, 0), (1, 0), (1, 2)]
->>> for move in moves:
-...     board = board.click(*move)
->>> board.is_solved()
-True
 
 ```
 
+**Heuristic search** uses a priority queue and yields solutions as they are discovered.
+If you let it run long enough, it will produce an optimal solution.
+You might run out of memory before that happens though.
 
+```pycon
+>>> from solvers import heuristic_search
+>>> board = Board(grid=[[1, 1, 2], [2, 3, 1], [4, 2, 2]])
+>>> for moves in heuristic_search(board):
+...    print(f"Found solution of length {len(moves)}: {moves}")
+Found solution of length 8: [(2, 1), (2, 2), (2, 2), (2, 1), (2, 1), (2, 0), (2, 0), (2, 0)]
+Found solution of length 7: [(0, 0), (2, 1), (1, 0), (1, 2), (2, 0), (2, 1), (2, 2)]
+Found solution of length 6: [(0, 0), (1, 1), (1, 2), (1, 2), (1, 0), (2, 0)]
+Found solution of length 5: [(0, 0), (1, 1), (1, 2), (2, 0), (1, 2)]
+Found solution of length 4: [(1, 1), (2, 0), (1, 0), (1, 2)]
+
+```
+
+**Monte Carlo tree search** also yields solutions as they are discovered.
+In the long run it produces a solution, but again you might run out of memory.
+
+```pycon
+>>> from solvers import monte_carlo_tree_search
+>>> board = Board(grid=[[1, 1, 2], [2, 3, 1], [4, 2, 2]])
+>>> for moves in monte_carlo_tree_search(board, seed=1):
+...    print(f"Found solution of length {len(moves)}: {moves}")
+Found solution of length 8: [(2, 1), (2, 2), (2, 2), (2, 1), (2, 1), (2, 0), (2, 0), (2, 0)]
+Found solution of length 5: [(1, 1), (1, 0), (1, 0), (1, 2), (2, 0)]
+Found solution of length 4: [(2, 0), (1, 1), (1, 0), (1, 2)]
+
+```

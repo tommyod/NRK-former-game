@@ -380,15 +380,6 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
 
 # =============================================================================
 
-
-def simulate(board, moves_so_far=0, seed=None):
-    if board.is_solved():
-        return len(board) - moves_so_far - 0
-
-    moves = len(list(best_first_search(board, power=0.0, seed=seed)))
-    return len(board) - moves_so_far - moves  # Higher is better
-
-
 @dataclass
 class MCTSNode:
     """Make board states comparable for tree search."""
@@ -454,7 +445,7 @@ class MCTSNode:
         return list(reversed(moves))
 
 
-def mcts_search(board: Board, iterations=1000, seed=None, verbosity=0) -> list:
+def monte_carlo_tree_search(board: Board, iterations=1000, seed=None, verbosity=0) -> list:
     """Monte Carlo Tree Search to find solution path."""
 
     def vprint(*args, v=0, **kwargs):
@@ -564,9 +555,7 @@ def mcts_search(board: Board, iterations=1000, seed=None, verbosity=0) -> list:
         node = max(children, key=lambda n: n.score / n.visits)
         moves.append(node.move)
 
-    print(len(moves), shortest_path)
     if len(moves) < shortest_path:
-        print("yield")
         yield moves
 
 
@@ -644,7 +633,7 @@ class TestSolvers:
         shape = rng.randint(2, 4), rng.randint(2, 4)
         board = Board.generate_random(shape=shape, seed=seed)
 
-        for moves in mcts_search(board, iterations=1000, seed=42):
+        for moves in monte_carlo_tree_search(board, iterations=1000, seed=42):
             test_board = board.copy()
 
             for move in moves:
@@ -660,7 +649,7 @@ class TestSolvers:
 
         # Solve it using both algorithms
         moves_astar = a_star_search(board)
-        for moves in mcts_search(board, iterations=9999, seed=42):
+        for moves in monte_carlo_tree_search(board, iterations=9999, seed=42):
             if len(moves_astar) == len(moves):
                 break
         else:
