@@ -1,6 +1,6 @@
 # NRK-former-game
 
-Code that attempts to solve NRK's game "Former" (similar to SameGame).
+Code that attempts to solve NRK's game "[Former](https://www.nrk.no/former-1.17105310)" (similar to [SameGame](https://en.wikipedia.org/wiki/SameGame)).
 
 ![GamePlay](./gameplay.gif)
 
@@ -65,3 +65,39 @@ All children (results of all valid clicks) can be retrieved:
 <BLANKLINE>
 
 ```
+
+## The solvers
+
+**Best first search** chooses the move that clears the most cells.
+
+```pycon
+>>> from solvers import best_first_search
+>>> board = Board(grid=[[1, 1, 2], [2, 3, 1], [4, 2, 2]])
+>>> moves = list(best_first_search(board))
+>>> moves
+[(2, 1), (2, 2), (2, 2), (2, 1), (2, 1), (2, 0), (2, 0), (2, 0)]
+>>> for move in moves:
+...     board = board.click(*move)
+>>> board.is_solved()
+True
+
+```
+
+**A\* search with an admissible heuristic** is guaranteed to solve the problem,
+but with large boards we run out of memory and the compute time is too long.
+A better heuristic could help---make a PR if you have an idea!
+
+```pycon
+>>> from solvers import a_star_search
+>>> board = Board(grid=[[1, 1, 2], [2, 3, 1], [4, 2, 2]])
+>>> moves = a_star_search(board)
+>>> moves
+[(1, 1), (2, 0), (1, 0), (1, 2)]
+>>> for move in moves:
+...     board = board.click(*move)
+>>> board.is_solved()
+True
+
+```
+
+

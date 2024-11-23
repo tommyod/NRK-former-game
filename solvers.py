@@ -86,6 +86,9 @@ True
 """
 
 from dataclasses import dataclass
+import math
+from typing import Optional, List, Set
+import dataclasses
 from heapq import heappush, heappop
 from collections import deque
 import pytest
@@ -103,6 +106,7 @@ def best_first_search(board: Board, power=None, seed=None):
     Instead, it records the number of cleared cells per child and chooses
     a random move with probability weights: cleared**power
     """
+    assert power is None or power >= 0
 
     rng = random.Random(seed)
     stack = [board.copy()]
@@ -372,8 +376,200 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
                 g_scores[next_board] = g
                 next_node = HeuristicNode(next_board, current.moves + ((i, j),))
                 heappush(heap, next_node)
+                
+# =============================================================================
 
 
+def simulate(board, moves_so_far=0, seed=None):
+    if board.is_solved():
+        return len(board) - moves_so_far - 0
+    
+    moves = len(list(best_first_search(board, power=0.0, seed=seed)))
+    return len(board) - moves_so_far - moves # Higher is better
+
+
+@dataclass
+class MCTSNode:
+    """Make board states comparable for tree search."""
+    board: Board
+    move: Optional[tuple] = None
+    parent: Optional['MCTSNode'] = dataclasses.field(repr=False, default=None)
+    visits: int = 0
+    score: float = 0 # Cleared per node in subtree if this node is chosen
+    children: Set['MCTSNode'] = dataclasses.field(repr=False, default=None)
+    depth: int = 0
+    remaining_cells: int = 0 # Total remaining 
+    cleared_cells_in_move:int = 0 # Cleared by last move
+    
+    def __post_init__(self):
+        self.children = []
+    
+    def __hash__(self):
+        return hash(str(self.board.grid))
+        
+    def __eq__(self, other):
+        if not isinstance(other, MCTSNode):
+            return False
+        return str(self.board.grid) == str(other.board.grid)
+    
+    def ucb_score(self, exploration=1.41):
+        """Calculate UCB score for node selection."""
+        if not self.visits:
+            return (float('inf'), -estimate_remaining(self.board))# higher is better
+        exploit = self.score / self.visits
+        explore = exploration * math.sqrt(math.log(self.parent.visits) / self.visits)
+        return (exploit + explore, -estimate_remaining(self.board))
+    
+    def expand(self) -> List['MCTSNode']:
+        """Create child nodes for all possible moves."""
+        if self.children:
+            return self.children
+            
+        children = self.board.children(return_removed=True)
+        for move, next_board, num_removed in children:
+            child = MCTSNode(next_board, move=move, parent=self, depth=self.depth+1,
+                             remaining_cells=self.remaining_cells - num_removed,
+                             cleared_cells_in_move=num_removed)
+            self.children.append(child)
+            
+        # print(f"expanded to {len(self.children)} children at {self.depth=}")
+        return self.children
+    
+    def construct_moves(self):
+        """Return a list of moves from the root to this node."""
+        
+        moves = []
+        node = self
+        while node.parent is not None:
+            moves.append(node.move)
+            node = node.parent
+            
+        return list(reversed(moves))
+        
+        
+
+
+def mcts_search(board: Board, iterations=1000, seed=None, verbosity=0) -> list:
+    """Monte Carlo Tree Search to find solution path."""
+    
+    def vprint(*args, v=0, **kwargs):
+        if verbosity >= v:
+            print(*args, **kwargs)
+    
+    # Yield a greedy solution, which also gives a lower bound on the solution
+    yield (greedy_solution := list(best_first_search(board)))
+    shortest_path = len(greedy_solution)
+    
+    # Rood note for all iterations
+    root = MCTSNode(board.copy(), remaining_cells=board.remaining())
+    
+    for iteration in range(1, iterations + 1):
+        
+        if verbosity >= 2:
+            vprint(f"Iteration: {iteration} ({shortest_path=})", v=2)
+        
+        # Start at the top of the explored tree
+        node = root
+        path = [node]
+        
+        # Node has been seen before
+        while node.visits > 0:
+            
+            # If the node is solved, skip ahead to simulating it.
+            # Simulation returns no moves, so we'll yield the path to the node
+            if node.board.is_solved():
+                break
+            
+            # We cannot possibly improve on what we already have
+            if node.depth + estimate_remaining(node.board) >= shortest_path:
+                vprint(f" Pruning: depth + h(board) >= shortest ({node.depth} + {estimate_remaining(node.board)} >= {shortest_path})", v=3)
+                break
+                
+            # Expand children (.expand() is cached if we have it before)
+            children = node.expand()
+
+            # Any unvisited node will get UCB score +inf and be chosen
+            node = max(children, key=lambda n: n.ucb_score())
+            #print(f"ucb: {node.ucb_score()}")
+            path.append(node)
+            
+        # Simulate from leaf node of explored tree down to the end of the game
+        simulation_seed = None if seed is None else seed + iteration
+        simulation_moves = list(best_first_search(node.board, power=2.0, seed=simulation_seed))
+        sim_num_cleared = node.remaining_cells
+        sim_num_moves = len(simulation_moves)
+        vprint(f" Simulation from depth {node.depth} gave path of length {sim_num_moves} (total={node.depth + sim_num_moves})", v=2)
+        vprint(f" Cleared per move in simulation: {sim_num_cleared / sim_num_moves:.3f}", v=2)
+        
+        if verbosity==1 and iteration % max((iterations // 100), 1) == 0:
+            vprint(f"Iter: {iteration} (sim. @ d={node.depth}, cleared/move @ sim={sim_num_cleared / sim_num_moves:.3f}) ({shortest_path=})", v=1)
+        
+        # The simulation lead to a new shortest path
+        if node.depth + sim_num_moves < shortest_path:
+            shortest_path = node.depth + sim_num_moves
+            vprint(f"Simulation from depth {node.depth} gave new best path of length {shortest_path}", v=1)
+            yield node.construct_moves() + simulation_moves
+            
+        
+        # Backpropagation starting at the bottom node
+        vprint(" Backpropagation (starting at bottom node and going up)", v=3)
+        cleared_in_path = 0
+        for path_num_moves, node in enumerate(reversed(path)):
+            node.visits += 1
+            score_cleared = (cleared_in_path + sim_num_cleared)
+            score_moves = (path_num_moves + sim_num_moves)
+            node.score += score_cleared / score_moves
+            vprint(f"  Updated node at depth {node.depth}", v=3)
+            vprint(f"   Cleared / move = ({cleared_in_path} + {sim_num_cleared}) / ({path_num_moves} + {sim_num_moves})", v=3)
+            cleared_in_path += node.cleared_cells_in_move
+            
+            # print(f"  Backprop. Updated node: {node}")
+            #print(node.cleared_cells_in_move / i)
+            
+    # Extract the best path
+    moves = []
+    node = root
+    while True:
+        
+        if node.board.is_solved():
+            break
+            
+        children = node.expand()
+        if any(n.visits == 0 for n in children):
+            moves.extend(best_first_search(node.board, seed=None))
+            break
+        
+        # Pure exploitation
+        node = max(children, key=lambda n: n.score/n.visits)
+        moves.append(node.move)
+        
+    print(len(moves), shortest_path)
+    if len(moves) < shortest_path:
+        print("yield")
+        yield moves
+        
+# =============================================================================
+
+def plot_solution(board, moves):
+    """Plot a solution sequence."""
+
+    board = board.copy()
+
+    import matplotlib.pyplot as plt
+
+    sqrt_moves = int(len(moves) ** 0.5)
+
+    nrows, ncols = sqrt_moves, sqrt_moves + 1
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols)
+
+    n_colors = max(c for row in board.grid for c in row)
+    for move, ax in zip(moves, iter(axes.ravel())):
+        board.plot(ax=ax, click=move, n_colors=n_colors)
+        board = board.click(*move)
+
+# =============================================================================
+
+    
 class TestSolvers:
     @pytest.mark.parametrize("seed", range(25))
     @pytest.mark.parametrize("relabel", [True, False])
@@ -412,26 +608,39 @@ class TestSolvers:
 
         # Solve it using both algorithms
         moves_astar = a_star_search(board)
-        *_, moves_heuristic = heuristic_search(board)
-        assert len(moves_astar) == len(moves_heuristic)
+        for moves in heuristic_search(board):
+            if len(moves_astar) == len(moves):
+                break
+        else:
+            assert False
+        
+    @pytest.mark.parametrize("seed", range(10))
+    def test_mcts_finds_valid_solution(self, seed):
+        rng = random.Random(seed)
+        shape = rng.randint(2, 4), rng.randint(2, 4)
+        board = Board.generate_random(shape=shape, seed=seed)
+        
+        for moves in mcts_search(board, iterations=1000, seed=42):
+            test_board = board.copy()
+            
+            for move in moves:
+                test_board = test_board.click(*move)
+            assert test_board.is_solved()
+            
+    @pytest.mark.parametrize("seed", range(100))
+    def test_that_mcts_solver_yields_optimal_solution(self, seed):
+        # Create a random board with a random shape
+        rng = random.Random(seed)
+        shape = rng.randint(2, 4), rng.randint(2, 4)
+        board = Board.generate_random(shape=shape, seed=seed)
 
-
-def plot_solution(board, moves):
-    """Plot a solution sequence."""
-
-    board = board.copy()
-
-    import matplotlib.pyplot as plt
-
-    sqrt_moves = int(len(moves) ** 0.5)
-
-    nrows, ncols = sqrt_moves, sqrt_moves + 1
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols)
-
-    n_colors = max(c for row in board.grid for c in row)
-    for move, ax in zip(moves, iter(axes.ravel())):
-        board.plot(ax=ax, click=move, n_colors=n_colors)
-        board = board.click(*move)
+        # Solve it using both algorithms
+        moves_astar = a_star_search(board)
+        for moves in mcts_search(board, iterations=9999, seed=42):
+            if len(moves_astar) == len(moves):
+                break
+        else:
+            assert False
 
 
 if __name__ == "__main__":
