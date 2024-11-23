@@ -158,7 +158,7 @@ class TestBoard:
         # Create a canonical board
         canonical_board = CanonicalBoard(board.grid)
 
-        for (i, j), flip, child in canonical_board.children():
+        for (i, j), child, flip in canonical_board.children(return_flip=True):
             assert child.canonicalize() == child
 
             if flip:

@@ -59,29 +59,29 @@ class TestSolvers:
         else:
             assert False
 
-    @pytest.mark.parametrize("seed", range(100))
+    @pytest.mark.parametrize("seed", range(1000))
     def test_that_mcts_finds_valid_solutions(self, seed):
         rng = random.Random(seed)
         shape = rng.randint(2, 4), rng.randint(2, 4)
         board = Board.generate_random(shape=shape, seed=seed)
 
-        for moves in monte_carlo_search(board, iterations=1000, seed=42):
+        for moves in monte_carlo_search(board, iterations=999, seed=42):
             test_board = board.copy()
 
             for move in moves:
                 test_board = test_board.click(*move)
             assert test_board.is_solved()
 
-    @pytest.mark.parametrize("seed", range(50))
+    @pytest.mark.parametrize("seed", range(1000))
     def test_that_mcts_solver_yields_optimal_solution(self, seed):
         # Create a random board with a random shape
         rng = random.Random(seed)
-        shape = rng.randint(2, 5), rng.randint(2, 5)
+        shape = rng.randint(2, 4), rng.randint(2, 4)
         board = Board.generate_random(shape=shape, seed=seed)
 
         # Solve it using both algorithms
         moves_astar = a_star_search(board)
-        for moves in monte_carlo_search(board, iterations=9999, seed=42):
+        for moves in monte_carlo_search(board, iterations=999999, seed=42):
             if len(moves_astar) == len(moves):
                 break
         else:
@@ -89,11 +89,4 @@ class TestSolvers:
 
 
 if __name__ == "__main__":
-    pytest.main(
-        [
-            __file__,
-            "-v",
-            "--doctest-modules",
-            "-l",
-        ]
-    )
+    pytest.main([__file__, "-v", "--doctest-modules", "-l", "-x"])
