@@ -112,8 +112,6 @@ Finally, all children (results of all valid clicks) can be retrieved:
     221
     231
     <BLANKLINE>
-
-
 """
 
 from typing import List, Tuple
@@ -161,7 +159,6 @@ class Board:
         >>> print(Board.generate_random(shape=(2, 4), seed=42))
         1132
         2211
-
         """
         rows, cols = shape
         rng = random.Random(seed)
@@ -200,7 +197,6 @@ class Board:
         123
         114
         212
-
         """
         board = self.copy()
         next_label = 1
@@ -271,7 +267,6 @@ class Board:
         3
         >>> Board(grid).click(1, 0).unique_remaining()
         4
-
         """
         return len(set(self.grid[i][j] for (i, j) in self.yield_clicks()))
 
@@ -281,7 +276,7 @@ class Board:
             if self.grid[i][j] > 0:
                 yield (i, j)
 
-    def children(self):
+    def children(self, return_removed=False):
         """Yields (move, board) for all children boards.
 
         Examples
@@ -319,21 +314,35 @@ class Board:
             return
 
         for i, j in self.yield_clicks():
-            board = self.copy().click(i, j)
+            board, num_removed = self.click(i, j, return_removed=True)
 
             if board in seen:
                 continue
 
-            yield (i, j), board
+            if return_removed:
+                yield (i, j), board, num_removed
+            else:
+                yield (i, j), board
+
             seen.add(board)
 
-    def click(self, i: int, j: int) -> bool:
-        """Handle a click at position (i,j)."""
+    def click(self, i: int, j: int, return_removed=False) -> bool:
+        """Handle a click at position (i,j).
+
+        Examples
+        --------
+        >>> board = Board([[1, 2], [3, 2]])
+        >>> board.click(0, 1, return_removed=True)
+        (Board([[1, 0], [3, 0]]), 2)
+        >>> board.click(1, 0, return_removed=True)
+        (Board([[0, 2], [1, 2]]), 1)
+        """
         outside = not (0 <= i < self.rows and 0 <= j < self.cols)
         if outside or self.grid[i][j] == 0:
             raise ValueError("Invalid click.")
 
-        return self.copy()._apply_move(i, j)
+        new_board, num_removed = self.copy()._apply_move(i, j)
+        return (new_board, num_removed) if return_removed else new_board
 
     def _apply_move(self, i: int, j: int):
         """Apply move and gravity, modifies the board in place."""
@@ -345,7 +354,7 @@ class Board:
 
         # Apply gravity
         self._apply_gravity(self.grid)
-        return self
+        return self, len(connected)
 
     def _find_connected(
         self, i: int, j: int, color: int, visited: Set[Tuple[int, int]]
@@ -549,7 +558,7 @@ class LabelInvariantBoard(Board):
         if check:
             assert self == Board(grid).relabel(), "Input must be canonical"
 
-    def click(self, i: int, j: int) -> bool:
+    def click(self, i: int, j: int, return_removed=False) -> bool:
         """Handle a click at position (i,j).
 
         Examples
@@ -559,10 +568,14 @@ class LabelInvariantBoard(Board):
         00
         01
         """
-        board = Board(self.grid).click(i, j).relabel()
-        return type(self)(board.grid, check=False)
+        board, num_removed = Board(self.grid).click(i, j, return_removed=True)
+        board = board.relabel()
+        if return_removed:
+            return type(self)(board.grid, check=False), num_removed
+        else:
+            return type(self)(board.grid, check=False)
 
-    def children(self):
+    def children(self, return_removed=False):
         """Yields (move, flip, board) for all children boards.
         To get the new board, apply the move, then flip it.
 
@@ -591,12 +604,16 @@ class LabelInvariantBoard(Board):
         seen = set()
 
         for i, j in self.yield_clicks():
-            board = self.click(i, j)
+            board, num_removed = self.click(i, j, return_removed=True)
+            board = type(self)(board.grid, check=False)
 
             if board in seen:
                 continue
             else:
-                yield (i, j), type(self)(board.grid, check=False)
+                if return_removed:
+                    yield (i, j), board, num_removed
+                else:
+                    yield (i, j), board
                 seen.add(board)
 
 
@@ -609,7 +626,7 @@ class CanonicalBoard(Board):
             msg = f"Input must be canonical. Got: \n{Board(grid)}"
             raise TypeError(msg)
 
-    def click(self, i: int, j: int) -> bool:
+    def click(self, i: int, j: int, return_removed=False) -> bool:
         """Handle a click at position (i,j).
 
         Examples
@@ -618,14 +635,17 @@ class CanonicalBoard(Board):
         >>> print(board.click(0, 0))
         00
         01
+        >>> board.click(0, 0, return_removed=True)
+        (CanonicalBoard([[0, 0], [0, 1]]), 3)
         """
-        board = Board(self.grid).click(i, j).canonicalize()
-        return type(self)(board.grid)
+        board, num_removed = Board(self.grid).click(i, j, return_removed=True)
+        board = type(self)(board.canonicalize().grid)
+        return (board, num_removed) if return_removed else board
 
     def canonicalize(self):
         return Board(self.grid).canonicalize()
 
-    def children(self):
+    def children(self, return_removed=False):
         """Yields (move, flip, board) for all children boards.
         To get the new board, apply the move, then flip it.
 
@@ -655,7 +675,7 @@ class CanonicalBoard(Board):
         non_canonical_board = Board(self.grid)
 
         for i, j in non_canonical_board.yield_clicks():
-            board = non_canonical_board.click(i, j)
+            board, num_removed = non_canonical_board.click(i, j, return_removed=True)
 
             board, flip = board.canonicalize(was_flipped=True)
             # j = self.cols - j - 1 if flip else j
@@ -663,7 +683,10 @@ class CanonicalBoard(Board):
             if board in seen:
                 continue
             else:
-                yield (i, j), flip, type(self)(board.grid)
+                if return_removed:
+                    (i, j), flip, type(self)(board.grid), num_removed
+                else:
+                    yield (i, j), flip, type(self)(board.grid)
                 seen.add(board)
 
 
