@@ -380,6 +380,7 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
 
 # =============================================================================
 
+
 @dataclass
 class MCTSNode:
     """Make board states comparable for tree search."""
@@ -445,7 +446,9 @@ class MCTSNode:
         return list(reversed(moves))
 
 
-def monte_carlo_tree_search(board: Board, iterations=1000, seed=None, verbosity=0) -> list:
+def monte_carlo_tree_search(
+    board: Board, iterations=1000, seed=None, verbosity=0
+) -> list:
     """Monte Carlo Tree Search to find solution path."""
 
     def vprint(*args, v=0, **kwargs):
