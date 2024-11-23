@@ -119,9 +119,8 @@ def best_first_search(board: Board, power=None, seed=None):
         # Go through all children and record how many are removed
         possibilities = []
 
-        for move, next_board in board.children():
-            cleared = board.remaining() - next_board.remaining()
-            possibilities.append((cleared, move))
+        for move, next_board, num_removed in board.children(return_removed=True):
+            possibilities.append((num_removed, move))
 
         # Deterministic selection of the next move
         if power is None:
@@ -393,6 +392,7 @@ class MCTSNode:
     depth: int = 0
     remaining_cells: int = 0  # Total remaining
     cleared_cells_in_move: int = 0  # Cleared by last move
+    pruned: bool = False
 
     def __post_init__(self):
         self.children = []
@@ -411,7 +411,7 @@ class MCTSNode:
             return (float("inf"), -estimate_remaining(self.board))  # higher is better
         exploit = self.score / self.visits
         explore = exploration * math.sqrt(math.log(self.parent.visits) / self.visits)
-        return (exploit + explore, -estimate_remaining(self.board))
+        return (not self.pruned, exploit + explore, -estimate_remaining(self.board))
 
     def expand(self) -> List["MCTSNode"]:
         """Create child nodes for all possible moves."""
@@ -480,10 +480,31 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
                     f" Pruning: depth + h(board) >= shortest ({node.depth} + {estimate_remaining(node.board)} >= {shortest_path})",
                     v=3,
                 )
-                break
+
+                # Condition happened on the root node. We cannot possibly
+                # do better, so we terminate the algorithm
+                if len(path) == 1:
+                    return
+
+                # No point in simulating this node, go to a neighbor instead
+                node.pruned = True  # Will be chosen last by UCB
+                path.pop()  # Remove this node from path
+                node = path[-1]  # Reset the node to parent
+                continue
 
             # Expand children (.expand() is cached if we have it before)
             children = node.expand()
+
+            # All children are pruned, go to neighbor
+            if all(child.pruned for child in children):
+                node.pruned = True  # Will be chosen last by UCB
+                path.pop()  # Remove this node from path
+
+                # All children of root node were pruned, return
+                if not path:
+                    return
+                node = path[-1]  # Reset the node to parent
+                continue
 
             # Any unvisited node will get UCB score +inf and be chosen
             node = max(children, key=lambda n: n.ucb_score())
@@ -493,7 +514,7 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
         # Simulate from leaf node of explored tree down to the end of the game
         simulation_seed = None if seed is None else seed + iteration
         simulation_moves = list(
-            best_first_search(node.board, power=2.0, seed=simulation_seed)
+            best_first_search(node.board, power=10.0, seed=simulation_seed)
         )
         sim_num_cleared = node.remaining_cells
         sim_num_moves = len(simulation_moves)
