@@ -6,7 +6,7 @@ import time
 from typing import Callable, List
 from board import Board, LabelInvariantBoard, CanonicalBoard
 from solvers import (
-    breath_first_search,
+    breadth_first_search,
     a_star_search,
     heuristic_search,
     monte_carlo_search,
@@ -170,13 +170,64 @@ def search_timer(algorithm, *args, **kwargs):
         yield elapsed_time, len(moves)
 
 
+def plot_solution(board, moves):
+    """Plot a solution sequence."""
+    import matplotlib.pyplot as plt
+
+    board = board.copy()
+    # Determine shape of the board
+    sqrt_moves = int(len(moves) ** 0.5)
+    if sqrt_moves * sqrt_moves == len(moves):
+        nrows = sqrt_moves
+        ncols = sqrt_moves
+    elif sqrt_moves * (sqrt_moves + 1) >= len(moves):
+        nrows = sqrt_moves
+        ncols = sqrt_moves + 1
+    else:
+        nrows = sqrt_moves + 1
+        ncols = sqrt_moves + 1
+
+    assert nrows * ncols >= len(moves)
+
+    # Create figure with minimal spacing
+    fig = plt.figure(figsize=(ncols * 2, nrows * 2))
+    gs = plt.GridSpec(nrows, ncols, figure=fig)
+    gs.update(wspace=0.1, hspace=0.1)  # Reduce spacing between subplots
+
+    # Create axes using GridSpec
+    axes = []
+    for i in range(nrows):
+        for j in range(ncols):
+            ax = fig.add_subplot(gs[i, j])
+            axes.append(ax)
+
+    axes = iter(axes)
+
+    for move, ax in zip(moves, axes):
+        board.plot(ax=ax, click=move, n_colors=4)
+        board = board.click(*move)
+        # Remove ticks and grid for cleaner look
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.grid(False)
+
+    # Turn off remaining axes
+    for ax in axes:
+        ax.axis("off")
+
+    # Adjust the layout to be more compact
+    plt.subplots_adjust(left=0.02, right=0.98, bottom=0.02, top=0.98)
+
+    return fig, axes
+
+
 if __name__ == "__main__":
     if False:
         plt.figure(figsize=(6, 3))
         plt.title("Solving random boards to optimality")
         N = 3 * 5
         n = N
-        solutions = list(itertools.islice(time_solver(breath_first_search), n))
+        solutions = list(itertools.islice(time_solver(breadth_first_search), n))
         times = [time for (_, time) in solutions]
         plt.semilogy(times, label="BFS")
 
@@ -218,40 +269,67 @@ if __name__ == "__main__":
         # geometric mean of branching factors => 35.445449
 
     if False:
-        plt.figure(figsize=(6, 3))
-        plt.title("Comparing heuristic search and Monte Carlo search")
-        BOARD_NUMBER = 21
+        for BOARD_NUMBER in [19, 20, 21, 22, 23, 24]:
+            plt.figure(figsize=(6, 3))
+            plt.title("Comparing heuristic search and Monte Carlo search")
+            # BOARD_NUMBER = 16
+            board = NRK_boards[BOARD_NUMBER].board
+
+            max_nodes = 500_000
+            results = list(search_timer(heuristic_search, board, max_nodes=max_nodes))
+            times = [seconds for (seconds, num_moves) in results]
+            num_moves = [num_moves for (seconds, num_moves) in results]
+            plt.semilogx(
+                times, num_moves, "-o", label=f"heuristic_search({max_nodes=})"
+            )
+
+            iterations = 20_000
+            results = list(
+                search_timer(monte_carlo_search, board, iterations=iterations, seed=42)
+            )
+            times = [seconds for (seconds, num_moves) in results]
+            num_moves = [num_moves for (seconds, num_moves) in results]
+            plt.semilogx(
+                times, num_moves, "-o", label=f"monte_carlo_search({iterations=})"
+            )
+
+            plt.axhline(
+                y=NRK_boards[BOARD_NUMBER].best,
+                label="Best known solution",
+                ls="--",
+                color="black",
+                alpha=0.33,
+            )
+
+            plt.legend()
+
+            plt.xlabel("Solution time")
+            plt.ylabel("Number of moves in solution")
+            plt.grid(True, ls="--", zorder=0, alpha=0.33)
+            plt.tight_layout()
+            plt.savefig(f"heuristic_searches_board_no_{BOARD_NUMBER}.png", dpi=200)
+            plt.show()
+
+    if False:
+        BOARD_NUMBER = 16
         board = NRK_boards[BOARD_NUMBER].board
 
-        max_nodes = 1 * 10**6
-        results = list(search_timer(heuristic_search, board, max_nodes=max_nodes))
-        times = [seconds for (seconds, num_moves) in results]
-        num_moves = [num_moves for (seconds, num_moves) in results]
-        plt.semilogx(times, num_moves, "-o", label=f"heuristic_search({max_nodes=})")
-
-        iterations = 50_000
+        iterations = 20_000
         results = list(
-            search_timer(monte_carlo_search, board, iterations=iterations, seed=42)
+            monte_carlo_search(board, iterations=iterations, seed=42, verbosity=1)
         )
-        times = [seconds for (seconds, num_moves) in results]
-        num_moves = [num_moves for (seconds, num_moves) in results]
-        plt.semilogx(times, num_moves, "-o", label=f"monte_carlo_search({iterations=})")
+        moves = results[-1]
 
-        plt.legend()
-
-        plt.xlabel("Solution time")
-        plt.ylabel("Number of moves in solution")
-        plt.grid(True, ls="--", zorder=0, alpha=0.33)
-        plt.tight_layout()
-        plt.savefig(f"heuristic_searches_board_no_{BOARD_NUMBER}.png", dpi=200)
+        fig, axes = plot_solution(board, moves)
+        plt.savefig(f"best_solution_found_no_{BOARD_NUMBER}.png", dpi=200)
         plt.show()
 
     if False:
         plt.figure(figsize=(6, 3))
-        plt.title("Best-first search on a board of size (9, 7)")
         rng = random.Random(42)
 
         board = NRK_boards[16].board
+        plt.title(f"Best-first search on a board with shape {(board.rows, board.cols)}")
 
         labels = []
         sim_results = best_first_performance(board, simulations=100)

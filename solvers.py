@@ -26,7 +26,7 @@ Breadth-first search (BFS)
 ...         [2, 2, 3],
 ...         [2, 1, 2]]
 >>> board = Board(grid)
->>> moves = breath_first_search(board)
+>>> moves = breadth_first_search(board)
 >>> moves
 [(0, 0), (2, 1), (1, 0)]
 
@@ -137,7 +137,7 @@ def best_first_search(board: Board, power=None, seed=None):
         yield move
 
 
-def breath_first_search(board: Board) -> list:
+def breadth_first_search(board: Board) -> list:
     """Breadth-first search to find shortest solution path.
 
     This approach is not very efficient, but it is guaranteed to return
@@ -578,26 +578,6 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
 
     if len(moves) < shortest_path:
         yield moves
-
-
-# =============================================================================
-
-
-def plot_solution(board, moves):
-    """Plot a solution sequence."""
-    import matplotlib.pyplot as plt
-
-    board = board.copy()
-
-    sqrt_moves = int(len(moves) ** 0.5)
-
-    nrows, ncols = sqrt_moves, sqrt_moves + 1
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols)
-
-    n_colors = max(c for row in board.grid for c in row)
-    for move, ax in zip(moves, iter(axes.ravel())):
-        board.plot(ax=ax, click=move, n_colors=n_colors)
-        board = board.click(*move)
 
 
 # =============================================================================

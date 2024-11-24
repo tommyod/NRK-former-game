@@ -8,7 +8,7 @@ import random
 
 from board import Board, LabelInvariantBoard
 from solvers import (
-    breath_first_search,
+    breadth_first_search,
     a_star_search,
     heuristic_search,
     monte_carlo_search,
@@ -28,7 +28,7 @@ class TestSolvers:
             board = LabelInvariantBoard(board.relabel().grid)
 
         # Solve it using both algorithms
-        moves_bfs = breath_first_search(board)
+        moves_bfs = breadth_first_search(board)
         moves_astar = a_star_search(board)
         assert len(moves_bfs) == len(moves_astar)
 
