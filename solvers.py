@@ -430,7 +430,6 @@ class MCTSNode:
             )
             self.children.append(child)
 
-        # print(f"expanded to {len(self.children)} children at {self.depth=}")
         return self.children
 
     def construct_moves(self):
@@ -453,7 +452,7 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
             print(*args, **kwargs)
 
     # Yield a greedy solution, which also gives a lower bound on the solution
-    yield (greedy_solution := list(best_first_search(board)))
+    yield (greedy_solution := list(best_first_search(board, power=None)))
     shortest_path = len(greedy_solution)
 
     # Rood note for all iterations
@@ -508,10 +507,10 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
 
             # Any unvisited node will get UCB score +inf and be chosen
             node = max(children, key=lambda n: n.ucb_score())
-            # print(f"ucb: {node.ucb_score()}")
             path.append(node)
 
         # Simulate from leaf node of explored tree down to the end of the game
+        # TODO: Here `power` could be considered a hyperparameter to be tuned.
         simulation_seed = None if seed is None else seed + iteration
         simulation_moves = list(
             best_first_search(node.board, power=10.0, seed=simulation_seed)
@@ -542,7 +541,14 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
             )
             yield node.construct_moves() + simulation_moves
 
-        # Backpropagation starting at the bottom node
+        # Backpropagation starting at the bottom node in the seen tree and
+        # going up to the root. If we have, from root, cleared [3, 1, 2]
+        # and simulation clears 10 in 3 moves, then the update will set scores:
+        # node #4 (leaf) : (10)             / 3
+        # node #3        : (10 + 2)         / 4
+        # node #2        : (10 + 2 + 1)     / 5
+        # node #1 (root) : (10 + 2 + 1 + 1) / 6
+        # The score at each node is average number cleared from that node.
         vprint(" Backpropagation (starting at bottom node and going up)", v=3)
         cleared_in_path = 0
         for path_num_moves, node in enumerate(reversed(path)):
@@ -557,9 +563,6 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
             )
             cleared_in_path += node.cleared_cells_in_move
 
-            # print(f"  Backprop. Updated node: {node}")
-            # print(node.cleared_cells_in_move / i)
-
     # Extract the best path
     moves = []
     node = root
@@ -569,7 +572,7 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
 
         children = node.expand()
         if any(n.visits == 0 for n in children):
-            moves.extend(best_first_search(node.board, seed=None))
+            moves.extend(best_first_search(node.board, power=None))
             break
 
         # Pure exploitation

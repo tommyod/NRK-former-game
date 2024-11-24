@@ -268,7 +268,7 @@ if __name__ == "__main__":
         # branching factors = [39.0, 37.077, 35.382, 33.82, 32.335]
         # geometric mean of branching factors => 35.445449
 
-    if False:
+    if True:
         for BOARD_NUMBER in [19, 20, 21, 22, 23, 24]:
             plt.figure(figsize=(6, 3))
             plt.title("Comparing heuristic search and Monte Carlo search")
