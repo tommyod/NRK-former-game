@@ -18,7 +18,7 @@ class Instance:
 # These boards were retrieved from NRK. Each board lives for 24 hours, and the
 # keys are the dates in november 2024 that the boards were live. The "best"
 # key is the record solution within the 24 hours the board was live.
-{
+NRK_boards = {
     16: Instance(
         grid=[
             [1, 2, 2, 3, 1, 4, 4],
@@ -100,6 +100,20 @@ class Instance:
             [2, 1, 3, 4, 3, 2, 4],
             [2, 2, 1, 1, 3, 2, 4],
             [3, 4, 4, 2, 4, 3, 3],
+        ],
+        best=13,
+    ),
+    24: Instance(
+        grid=[
+            [1, 2, 3, 1, 2, 3, 3],
+            [4, 2, 1, 2, 2, 3, 1],
+            [1, 2, 1, 3, 4, 4, 1],
+            [2, 4, 2, 2, 2, 4, 2],
+            [3, 2, 3, 3, 3, 4, 4],
+            [2, 4, 2, 2, 3, 2, 4],
+            [4, 2, 2, 3, 3, 1, 4],
+            [1, 2, 2, 1, 3, 3, 2],
+            [4, 2, 3, 4, 1, 1, 4],
         ],
         best=13,
     ),

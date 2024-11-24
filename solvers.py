@@ -1,6 +1,5 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
+This module contains solvers.
 
 Best-first search
 -----------------
@@ -27,7 +26,7 @@ Breadth-first search (BFS)
 ...         [2, 2, 3],
 ...         [2, 1, 2]]
 >>> board = Board(grid)
->>> moves = breath_first_search(board)
+>>> moves = breadth_first_search(board)
 >>> moves
 [(0, 0), (2, 1), (1, 0)]
 
@@ -96,7 +95,7 @@ import random
 import itertools
 import functools
 
-from board import Board, LabelInvariantBoard
+from board import Board
 
 
 def best_first_search(board: Board, power=None, seed=None):
@@ -120,9 +119,8 @@ def best_first_search(board: Board, power=None, seed=None):
         # Go through all children and record how many are removed
         possibilities = []
 
-        for move, next_board in board.children():
-            cleared = board.remaining() - next_board.remaining()
-            possibilities.append((cleared, move))
+        for move, next_board, num_removed in board.children(return_removed=True):
+            possibilities.append((num_removed, move))
 
         # Deterministic selection of the next move
         if power is None:
@@ -139,7 +137,7 @@ def best_first_search(board: Board, power=None, seed=None):
         yield move
 
 
-def breath_first_search(board: Board) -> list:
+def breadth_first_search(board: Board) -> list:
     """Breadth-first search to find shortest solution path.
 
     This approach is not very efficient, but it is guaranteed to return
@@ -394,6 +392,7 @@ class MCTSNode:
     depth: int = 0
     remaining_cells: int = 0  # Total remaining
     cleared_cells_in_move: int = 0  # Cleared by last move
+    pruned: bool = False
 
     def __post_init__(self):
         self.children = []
@@ -412,7 +411,7 @@ class MCTSNode:
             return (float("inf"), -estimate_remaining(self.board))  # higher is better
         exploit = self.score / self.visits
         explore = exploration * math.sqrt(math.log(self.parent.visits) / self.visits)
-        return (exploit + explore, -estimate_remaining(self.board))
+        return (not self.pruned, exploit + explore, -estimate_remaining(self.board))
 
     def expand(self) -> List["MCTSNode"]:
         """Create child nodes for all possible moves."""
@@ -431,7 +430,6 @@ class MCTSNode:
             )
             self.children.append(child)
 
-        # print(f"expanded to {len(self.children)} children at {self.depth=}")
         return self.children
 
     def construct_moves(self):
@@ -446,9 +444,7 @@ class MCTSNode:
         return list(reversed(moves))
 
 
-def monte_carlo_tree_search(
-    board: Board, iterations=1000, seed=None, verbosity=0
-) -> list:
+def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) -> list:
     """Monte Carlo Tree Search to find solution path."""
 
     def vprint(*args, v=0, **kwargs):
@@ -456,7 +452,7 @@ def monte_carlo_tree_search(
             print(*args, **kwargs)
 
     # Yield a greedy solution, which also gives a lower bound on the solution
-    yield (greedy_solution := list(best_first_search(board)))
+    yield (greedy_solution := list(best_first_search(board, power=None)))
     shortest_path = len(greedy_solution)
 
     # Rood note for all iterations
@@ -483,20 +479,42 @@ def monte_carlo_tree_search(
                     f" Pruning: depth + h(board) >= shortest ({node.depth} + {estimate_remaining(node.board)} >= {shortest_path})",
                     v=3,
                 )
-                break
+
+                # Condition happened on the root node. We cannot possibly
+                # do better, so we terminate the algorithm
+                if len(path) == 1:
+                    return
+
+                # No point in simulating this node, go to a neighbor instead
+                node.pruned = True  # Will be chosen last by UCB
+                path.pop()  # Remove this node from path
+                node = path[-1]  # Reset the node to parent
+                continue
 
             # Expand children (.expand() is cached if we have it before)
             children = node.expand()
 
+            # All children are pruned, go to neighbor
+            if all(child.pruned for child in children):
+                node.pruned = True  # Will be chosen last by UCB
+                path.pop()  # Remove this node from path
+
+                # All children of root node were pruned, return
+                if not path:
+                    return
+                node = path[-1]  # Reset the node to parent
+                continue
+
             # Any unvisited node will get UCB score +inf and be chosen
+            # TODO: The parameter `exploration` for UCB could be tuned
             node = max(children, key=lambda n: n.ucb_score())
-            # print(f"ucb: {node.ucb_score()}")
             path.append(node)
 
         # Simulate from leaf node of explored tree down to the end of the game
+        # TODO: Here `power` could be considered a hyperparameter to be tuned.
         simulation_seed = None if seed is None else seed + iteration
         simulation_moves = list(
-            best_first_search(node.board, power=2.0, seed=simulation_seed)
+            best_first_search(node.board, power=10.0, seed=simulation_seed)
         )
         sim_num_cleared = node.remaining_cells
         sim_num_moves = len(simulation_moves)
@@ -524,7 +542,14 @@ def monte_carlo_tree_search(
             )
             yield node.construct_moves() + simulation_moves
 
-        # Backpropagation starting at the bottom node
+        # Backpropagation starting at the bottom node in the seen tree and
+        # going up to the root. If we have, from root, cleared [3, 1, 2]
+        # and simulation clears 10 in 3 moves, then the update will set scores:
+        # node #4 (leaf) : (10)             / 3
+        # node #3        : (10 + 2)         / 4
+        # node #2        : (10 + 2 + 1)     / 5
+        # node #1 (root) : (10 + 2 + 1 + 1) / 6
+        # The score at each node is average number cleared from that node.
         vprint(" Backpropagation (starting at bottom node and going up)", v=3)
         cleared_in_path = 0
         for path_num_moves, node in enumerate(reversed(path)):
@@ -539,9 +564,6 @@ def monte_carlo_tree_search(
             )
             cleared_in_path += node.cleared_cells_in_move
 
-            # print(f"  Backprop. Updated node: {node}")
-            # print(node.cleared_cells_in_move / i)
-
     # Extract the best path
     moves = []
     node = root
@@ -551,7 +573,7 @@ def monte_carlo_tree_search(
 
         children = node.expand()
         if any(n.visits == 0 for n in children):
-            moves.extend(best_first_search(node.board, seed=None))
+            moves.extend(best_first_search(node.board, power=None))
             break
 
         # Pure exploitation
@@ -563,100 +585,6 @@ def monte_carlo_tree_search(
 
 
 # =============================================================================
-
-
-def plot_solution(board, moves):
-    """Plot a solution sequence."""
-
-    board = board.copy()
-
-    import matplotlib.pyplot as plt
-
-    sqrt_moves = int(len(moves) ** 0.5)
-
-    nrows, ncols = sqrt_moves, sqrt_moves + 1
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols)
-
-    n_colors = max(c for row in board.grid for c in row)
-    for move, ax in zip(moves, iter(axes.ravel())):
-        board.plot(ax=ax, click=move, n_colors=n_colors)
-        board = board.click(*move)
-
-
-# =============================================================================
-
-
-class TestSolvers:
-    @pytest.mark.parametrize("seed", range(25))
-    @pytest.mark.parametrize("relabel", [True, False])
-    def test_that_breadth_first_solution_length_equals_a_star(self, seed, relabel):
-        # Create a random board with a random shape
-        rng = random.Random(seed)
-        shape = rng.randint(1, 4), rng.randint(1, 4)
-        board = Board.generate_random(shape=shape, seed=seed)
-
-        if relabel:
-            board = LabelInvariantBoard(board.relabel().grid)
-
-        # Solve it using both algorithms
-        moves_bfs = breath_first_search(board)
-        moves_astar = a_star_search(board)
-        assert len(moves_bfs) == len(moves_astar)
-
-        # Verify that solutions yield the solved board
-        board_bfs = board.copy()
-        for move in moves_bfs:
-            board_bfs = board_bfs.click(*move)
-        assert board_bfs.is_solved()
-
-        # Verify that solutions yield the solved board
-        board_astar = board.copy()
-        for move in moves_astar:
-            board_astar = board_astar.click(*move)
-        assert board_astar.is_solved()
-
-    @pytest.mark.parametrize("seed", range(100))
-    def test_that_heuristic_solver_yields_optimal_solution(self, seed):
-        # Create a random board with a random shape
-        rng = random.Random(seed)
-        shape = rng.randint(2, 5), rng.randint(2, 5)
-        board = Board.generate_random(shape=shape, seed=seed)
-
-        # Solve it using both algorithms
-        moves_astar = a_star_search(board)
-        for moves in heuristic_search(board):
-            if len(moves_astar) == len(moves):
-                break
-        else:
-            assert False
-
-    @pytest.mark.parametrize("seed", range(10))
-    def test_mcts_finds_valid_solution(self, seed):
-        rng = random.Random(seed)
-        shape = rng.randint(2, 4), rng.randint(2, 4)
-        board = Board.generate_random(shape=shape, seed=seed)
-
-        for moves in monte_carlo_tree_search(board, iterations=1000, seed=42):
-            test_board = board.copy()
-
-            for move in moves:
-                test_board = test_board.click(*move)
-            assert test_board.is_solved()
-
-    @pytest.mark.parametrize("seed", range(100))
-    def test_that_mcts_solver_yields_optimal_solution(self, seed):
-        # Create a random board with a random shape
-        rng = random.Random(seed)
-        shape = rng.randint(2, 4), rng.randint(2, 4)
-        board = Board.generate_random(shape=shape, seed=seed)
-
-        # Solve it using both algorithms
-        moves_astar = a_star_search(board)
-        for moves in monte_carlo_tree_search(board, iterations=9999, seed=42):
-            if len(moves_astar) == len(moves):
-                break
-        else:
-            assert False
 
 
 if __name__ == "__main__":

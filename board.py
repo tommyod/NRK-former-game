@@ -1,5 +1,4 @@
 """
-
 Game board definition
 ---------------------
 
@@ -118,7 +117,6 @@ from typing import List, Tuple
 from typing import Set
 from copy import deepcopy
 import itertools
-import pytest
 import random
 import functools
 
@@ -237,7 +235,7 @@ class Board:
         #   relabel() -> flip() -> relabel() -> flip()
         # Our of these four, we choose the lowest number (lexicographic order)
 
-        b0 = self.copy().relabel()
+        b0 = Board(self.grid).relabel()
         b1 = b0.flip()  # Flipped board
         b2 = b1.relabel()  # Flipped board
         b3 = b2.flip()
@@ -346,7 +344,7 @@ class Board:
 
     def _apply_move(self, i: int, j: int):
         """Apply move and gravity, modifies the board in place."""
-        connected = self._find_connected(i, j, color=self.grid[i][j], visited=set())
+        connected = self._find_connected(i, j, value=self.grid[i][j], visited=set())
 
         # Remove connected cells
         for row, col in connected:
@@ -357,22 +355,22 @@ class Board:
         return self, len(connected)
 
     def _find_connected(
-        self, i: int, j: int, color: int, visited: Set[Tuple[int, int]]
+        self, i: int, j: int, value: int, visited: Set[Tuple[int, int]]
     ) -> Set[Tuple[int, int]]:
-        """Find all cells connected to (i,j) with the same color."""
+        """Find all cells connected to (i,j) with the same value."""
         outside = not (0 <= i < self.rows and 0 <= j < self.cols)
 
-        if outside or ((i, j) in visited) or (self.grid[i][j] != color):
+        if outside or ((i, j) in visited) or (self.grid[i][j] != value):
             return visited
 
         visited.add((i, j))
         for di, dj in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
             # Recursive call, which updates the `visisted` argument
-            self._find_connected(i + di, j + dj, color, visited)
+            self._find_connected(i + di, j + dj, value, visited)
         return visited
 
     def _apply_gravity(self, grid: List[List[int]]):
-        """Make cells fall down to fill empty spaces,
+        """Make cells fall down to fill cleared spaces,
         modifying the board in place."""
 
         for j in range(self.cols):
@@ -388,13 +386,14 @@ class Board:
 
         return self
 
+    @functools.cache
     def is_solved(self) -> bool:
         """Check if the board is cleared (all cells are zero)."""
         # Only need to check bottom row because of gravity
         return all(cell == 0 for cell in self.grid[-1])
 
     def remaining(self) -> int:
-        """Count number of remaining non-zero cells.
+        """Count number of remaining non-cleared (non-zero) cells.
 
         Examples
         --------
@@ -448,15 +447,15 @@ class Board:
         coords = itertools.product(range(self.rows), range(self.cols))
         return all(self.grid[i][j] == other.grid[i][j] for (i, j) in coords)
 
+    def verify_solution(self, moves):
+        """Returns True if a sequence of moves solves the board."""
+        board = self.copy()
+        for move in moves:
+            board = board.click(*move)
+        return board.is_solved()
+
     def plot(self, ax=None, click=None, n_colors=None, show_values=False):
         """Plot the current board state using matplotlib.
-
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            The axis to plot on. If None, creates a new figure and axis.
-        click : tuple(int, int), optional
-            If provided, marks the position (i,j) with an X.
 
         Returns
         -------
@@ -486,7 +485,7 @@ class Board:
         unique_numbers = sorted(set(num for row in self.grid for num in row if num > 0))
         n_colors = len(unique_numbers) if n_colors is None else n_colors
         color_map = {i: plt.cm.Set3.colors[i % 12] for i in range(1, n_colors + 1)}
-        color_map[0] = "white"  # Empty cells are white
+        color_map[0] = "white"  # Cleared cells are white
 
         # Create the grid
         for i in range(self.rows):
@@ -556,7 +555,7 @@ class LabelInvariantBoard(Board):
     def __init__(self, grid, check=True):
         super().__init__(grid)
         if check:
-            assert self == Board(grid).relabel(), "Input must be canonical"
+            assert self == Board(grid).relabel(), "Input must be correctly labeled"
 
     def click(self, i: int, j: int, return_removed=False) -> bool:
         """Handle a click at position (i,j).
@@ -645,14 +644,14 @@ class CanonicalBoard(Board):
     def canonicalize(self):
         return Board(self.grid).canonicalize()
 
-    def children(self, return_removed=False):
+    def children(self, return_removed=False, return_flip=False):
         """Yields (move, flip, board) for all children boards.
         To get the new board, apply the move, then flip it.
 
         Examples
         --------
         >>> board = CanonicalBoard([[1, 2, 3], [1, 3, 2]])
-        >>> for move, flip, child in board.children():
+        >>> for move, child, flip in board.children(return_flip=True):
         ...     print(move, flip)
         ...     print(board)
         (0, 0) False
@@ -677,175 +676,24 @@ class CanonicalBoard(Board):
         for i, j in non_canonical_board.yield_clicks():
             board, num_removed = non_canonical_board.click(i, j, return_removed=True)
 
+            # TODO: To recover solution path, flips must be taken into account.
+            # This is not implemented
             board, flip = board.canonicalize(was_flipped=True)
             # j = self.cols - j - 1 if flip else j
 
             if board in seen:
                 continue
             else:
-                if return_removed:
-                    (i, j), flip, type(self)(board.grid), num_removed
+                if return_removed and return_flip:
+                    yield (i, j), type(self)(board.grid), num_removed, flip
+                elif return_removed and not return_flip:
+                    yield (i, j), type(self)(board.grid), num_removed
+                elif not return_removed and return_flip:
+                    yield (i, j), type(self)(board.grid), flip
                 else:
-                    yield (i, j), flip, type(self)(board.grid)
+                    yield (i, j), type(self)(board.grid)
+
                 seen.add(board)
-
-
-class TestBoard:
-    @pytest.fixture
-    def simple_board(self):
-        """Create a simple 2x2 board for basic tests"""
-        return Board([[1, 2], [2, 1]])
-
-    @pytest.fixture
-    def complex_board(self):
-        """Create a more complex board for testing game mechanics"""
-        return Board([[1, 2, 3], [2, 3, 3], [4, 4, 4]])
-
-    def test_board_initialization(self):
-        """Test that boards are initialized correctly"""
-        grid = [[1, 2], [3, 4]]
-        board = Board(grid)
-        assert board.rows == 2
-        assert board.cols == 2
-        assert board.grid == grid
-        assert board.grid is not grid  # Should be a deep copy
-
-    def test_board_equality(self):
-        """Test board equality comparisons"""
-        board1 = Board([[1, 2], [3, 4]])
-        board2 = Board([[1, 2], [3, 4]])
-        board3 = Board([[2, 1], [3, 4]])
-
-        assert board1 == board2
-        assert board1 != board3
-        assert board1 != "not a board"
-
-    def test_basic_click(self, simple_board):
-        """Test basic clicking behavior"""
-        clicked = simple_board.click(0, 0)
-        assert clicked.grid == [[0, 2], [2, 1]]
-        assert clicked != simple_board  # Should create new instance
-
-    def test_invalid_clicks(self, simple_board):
-        """Test that invalid clicks raise appropriate errors"""
-        with pytest.raises(ValueError):
-            simple_board.click(-1, 0)  # Out of bounds
-        with pytest.raises(ValueError):
-            simple_board.click(0, 2)  # Out of bounds
-
-        # Click empty cell after clearing it
-        clicked = simple_board.click(0, 0)
-        with pytest.raises(ValueError):
-            clicked.click(0, 0)  # Clicking on empty space
-
-    def test_gravity(self, complex_board):
-        """Test that pieces fall correctly after clearing"""
-        # Click bottom row to test gravity
-        board = complex_board.click(2, 0)
-        expected = [[0, 0, 0], [1, 2, 3], [2, 3, 3]]
-        assert board.grid == expected
-
-    def test_connected_removal(self, complex_board):
-        """Test that connected pieces are removed properly"""
-        # Click on a '4' in the bottom row
-        board = complex_board.click(2, 1)
-        # All connected 4's should be removed
-        assert all(4 not in row for row in board.grid)
-
-    def test_board_statistics(self, complex_board):
-        """Test statistical methods of the board"""
-        assert len(complex_board) == 9  # 3x3 board
-        assert complex_board.remaining() == 9
-        assert complex_board.unique_remaining() == 4
-
-        clicked = complex_board.click(2, 0)
-        assert clicked.remaining() == 6
-        assert clicked.unique_remaining() == 3
-
-    def test_canonicalization(self):
-        """Test board canonicalization"""
-        board = Board([[3, 1], [1, 2]])
-        canonical = board.canonicalize()
-        assert canonical.grid == [[1, 2], [2, 3]]  # Numbers should be remapped
-
-    def test_children_generation(self, simple_board):
-        """Test generation of child boards"""
-        children = list(simple_board.children())
-        assert len(children) == 4  # Should have 4 possible moves
-
-        # Verify all children are unique
-        child_boards = [board for _, board in children]
-        assert len(set(hash(board) for board in child_boards)) == len(child_boards)
-
-    def test_is_solved(self, simple_board):
-        """Test win condition detection"""
-        assert not simple_board.is_solved()
-
-        # Create a solved board
-        solved = Board([[0, 0], [0, 0]])
-        assert solved.is_solved()
-
-    def test_board_copy(self, complex_board):
-        """Test that board copying works correctly"""
-        copy = complex_board.copy()
-        assert copy == complex_board
-        assert copy is not complex_board
-        assert copy.grid is not complex_board.grid
-
-        # Modify copy shouldn't affect original
-        copy.grid[0][0] = 9
-        assert complex_board.grid[0][0] != 9
-
-    def test_display_output(self, simple_board, capsys):
-        """Test display output formatting"""
-        simple_board.display()
-        captured = capsys.readouterr()
-        assert captured.out == "12\n21\n"
-
-        # Test display with click
-        simple_board.display(click=(0, 0))
-        captured = capsys.readouterr()
-        assert captured.out == "X2\n21\n"
-
-    def test_flipping(self):
-        """Test board flipping functionality"""
-        board = Board([[1, 2, 3], [4, 5, 6]])
-        flipped = board.flip()
-        assert flipped.grid == [[3, 2, 1], [6, 5, 4]]
-
-    @pytest.mark.parametrize("seed", range(10))
-    def test_that_relabeling_and_flipping(self, seed):
-        # Create a random board with a random shape
-        rng = random.Random(seed)
-        rows, cols = rng.randint(2, 4), rng.randint(2, 4)
-        board = Board.generate_random(shape=(rows, cols), seed=seed).canonicalize()
-        assert board.relabel().flip().relabel().flip().relabel() == board.relabel()
-
-    @pytest.mark.parametrize("seed", range(10))
-    def test_that_canonicalization_is_idempotent(self, seed):
-        # Create a random board with a random shape
-        rng = random.Random(seed)
-        rows, cols = rng.randint(2, 4), rng.randint(2, 4)
-        board = Board.generate_random(shape=(rows, cols), seed=seed).canonicalize()
-        assert board == board.canonicalize()
-
-    @pytest.mark.parametrize("seed", range(1))
-    def test_canonical_clicks(self, seed):
-        # Create a random board with a random shape
-        rng = random.Random(seed)
-        rows, cols = rng.randint(2, 2), rng.randint(2, 3)
-        board = Board.generate_random(shape=(rows, cols), seed=seed).canonicalize()
-
-        # Create a canonical board
-        canonical_board = CanonicalBoard(board.grid)
-
-        for (i, j), flip, child in canonical_board.children():
-            assert child.canonicalize() == child
-
-            if flip:
-                assert child == board.click(i, j).flip().canonicalize()
-            else:
-                assert child == board.click(i, j).canonicalize()
 
 
 if __name__ == "__main__":
