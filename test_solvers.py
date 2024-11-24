@@ -30,19 +30,13 @@ class TestSolvers:
         # Solve it using both algorithms
         moves_bfs = breadth_first_search(board)
         moves_astar = a_star_search(board)
+
+        # Verify that solutions yield the solved board
+        assert board.verify_solution(moves_bfs)
+        assert board.verify_solution(moves_astar)
+
+        # Verify that A* is as good as BFS, which is more naive
         assert len(moves_bfs) == len(moves_astar)
-
-        # Verify that solutions yield the solved board
-        board_bfs = board.copy()
-        for move in moves_bfs:
-            board_bfs = board_bfs.click(*move)
-        assert board_bfs.is_solved()
-
-        # Verify that solutions yield the solved board
-        board_astar = board.copy()
-        for move in moves_astar:
-            board_astar = board_astar.click(*move)
-        assert board_astar.is_solved()
 
     @pytest.mark.parametrize("seed", range(100))
     def test_that_heuristic_solver_yields_optimal_solution(self, seed):
@@ -53,7 +47,10 @@ class TestSolvers:
 
         # Solve it using both algorithms
         moves_astar = a_star_search(board)
+        assert board.verify_solution(moves_astar)
+
         for moves in heuristic_search(board):
+            assert board.verify_solution(moves)
             if len(moves_astar) == len(moves):
                 break
         else:
@@ -66,11 +63,7 @@ class TestSolvers:
         board = Board.generate_random(shape=shape, seed=seed)
 
         for moves in monte_carlo_search(board, iterations=999, seed=42):
-            test_board = board.copy()
-
-            for move in moves:
-                test_board = test_board.click(*move)
-            assert test_board.is_solved()
+            assert board.verify_solution(moves)
 
     @pytest.mark.parametrize("seed", range(1000))
     def test_that_mcts_solver_yields_optimal_solution(self, seed):
@@ -79,9 +72,13 @@ class TestSolvers:
         shape = rng.randint(2, 4), rng.randint(2, 4)
         board = Board.generate_random(shape=shape, seed=seed)
 
-        # Solve it using both algorithms
+        # Solve the board with A* first, which guarantees an optimal solution
         moves_astar = a_star_search(board)
+        assert board.verify_solution(moves_astar)
+
+        # Solving the board with MCTS
         for moves in monte_carlo_search(board, iterations=999999, seed=42):
+            assert board.verify_solution(moves)
             if len(moves_astar) == len(moves):
                 break
         else:

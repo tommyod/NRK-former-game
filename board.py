@@ -447,6 +447,13 @@ class Board:
         coords = itertools.product(range(self.rows), range(self.cols))
         return all(self.grid[i][j] == other.grid[i][j] for (i, j) in coords)
 
+    def verify_solution(self, moves):
+        """Returns True if a sequence of moves solves the board."""
+        board = self.copy()
+        for move in moves:
+            board = board.click(*move)
+        return board.is_solved()
+
     def plot(self, ax=None, click=None, n_colors=None, show_values=False):
         """Plot the current board state using matplotlib.
 

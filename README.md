@@ -94,6 +94,8 @@ A better heuristic could help---make a PR if you have an idea!
 >>> moves = a_star_search(board)
 >>> moves
 [(1, 1), (2, 0), (1, 0), (1, 2)]
+>>> board.verify_solution(moves)
+True
 
 ```
 
