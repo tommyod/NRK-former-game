@@ -506,6 +506,7 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
                 continue
 
             # Any unvisited node will get UCB score +inf and be chosen
+            # TODO: The parameter `exploration` for UCB could be tuned
             node = max(children, key=lambda n: n.ucb_score())
             path.append(node)
 
