@@ -193,8 +193,51 @@ def breadth_first_search(board: Board) -> list:
             visited.add(next_board)
             queue.append((next_board, moves + [(i, j)]))
 
-    # No solution found
-    return None
+
+def depth_limited_search(board: Board, depth_limit: int) -> Optional[list]:
+    """Recursive depth-limited search implementation.
+
+    Examples
+    --------
+    >>> board = Board([[1, 2], [2, 1]])
+    >>> depth_limited_search(board, depth_limit=2)
+    >>> moves = depth_limited_search(board, depth_limit=3)
+    >>> moves
+    [(0, 0), (1, 1), (1, 0)]
+    >>> board.verify_solution(moves)
+    True
+    """
+
+    def dfs(board: Board, depth: int, moves: list) -> Optional[list]:
+        if board.is_solved():
+            return moves
+
+        if depth >= depth_limit:
+            return
+
+        for move, child in board.children():
+            if result := dfs(child, depth + 1, moves + [move]):
+                return result
+
+    return dfs(board.copy(), 0, [])
+
+
+def iterative_deepening_search(board: Board) -> list:
+    """Iterative deepening depth limited search to find shortest solution path.
+
+    Examples
+    --------
+    >>> grid = [[3, 3, 3],
+    ...         [2, 2, 3],
+    ...         [2, 1, 2]]
+    >>> board = Board(grid)
+    >>> moves = iterative_deepening_search(board)
+    >>> moves
+    [(0, 0), (2, 1), (1, 0)]
+    """
+    for depth in itertools.count(0):
+        if result := depth_limited_search(board, depth):
+            return result
 
 
 # =============================================================================

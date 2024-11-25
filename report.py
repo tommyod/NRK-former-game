@@ -309,14 +309,19 @@ if __name__ == "__main__":
             plt.tight_layout()
             plt.savefig(f"heuristic_searches_board_no_{BOARD_NUMBER}.png", dpi=200)
             plt.show()
+            
+    
 
     if False:
-        BOARD_NUMBER = 16
+        BOARD_NUMBER = 25
         board = NRK_boards[BOARD_NUMBER].board
+        board = Board(board.grid)
+        
+        # board = Board.generate_random((4,4), seed=3)
 
-        iterations = 20_000
+        iterations = 100_000
         results = list(
-            monte_carlo_search(board, iterations=iterations, seed=42, verbosity=1)
+            monte_carlo_search(board, iterations=iterations, seed=2, verbosity=1)
         )
         moves = results[-1]
 
@@ -356,3 +361,24 @@ if __name__ == "__main__":
         plt.tight_layout()
         plt.savefig("randomized_best_first_search.png", dpi=200)
         plt.show()
+        
+        
+    if True:
+        # Test various levels of exploration
+        for exploration in [0.25, 0.5, 1, 2, 4]:
+            results = []
+            for seed in range(10):
+                
+                board = Board.generate_random((9, 7), seed=seed)
+                
+
+                iterations = 10_000
+                *_, moves = list(
+                    monte_carlo_search(board, iterations=iterations, seed=2, verbosity=0,
+                                       exploration=exploration)
+                )
+                results.append(len(moves))
+                
+            import statistics
+            print(exploration, statistics.mean(results))
+                
