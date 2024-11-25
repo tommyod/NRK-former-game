@@ -81,6 +81,32 @@ Heuristic search
 True
 
 
+Monte Carlo search
+------------------
+
+>>> grid = [[3, 3, 3],
+...         [2, 2, 3],
+...         [2, 1, 2]]
+>>> board = Board(grid)
+>>> solutions = monte_carlo_search(board)
+>>> for moves in solutions:
+...     print(moves)
+[(0, 0), (1, 0), (2, 2), (2, 1)]
+[(2, 1), (1, 0), (1, 2)]
+>>> board = Board([[1, 4, 4, 3],
+...                [3, 4, 2, 2],
+...                [4, 4, 2, 4],
+...                [3, 4, 2, 2],
+...                [3, 1, 1, 3]])
+>>> for moves in heuristic_search(board):
+...     print(moves)
+[(0, 1), (1, 2), (2, 0), (4, 0), (4, 3), (4, 3), (4, 3)]
+[(0, 1), (1, 2), (2, 0), (4, 0), (3, 3), (3, 3)]
+[(1, 2), (0, 1), (2, 0), (4, 0), (3, 3)]
+>>> len(moves) == len(a_star_search(board))
+True
+
+
 
 """
 
@@ -231,7 +257,7 @@ def a_star_search(board: Board) -> list:
                 heappush(heap, next_node)
 
 
-@functools.cache
+@functools.lru_cache(maxsize=2**10)  # 1024
 def consecutive_groups(tuple_):
     """Count how many consecutive groups of True there are.
 
@@ -249,7 +275,7 @@ def consecutive_groups(tuple_):
     return sum(1 for key, group in itertools.groupby(tuple_) if key)
 
 
-@functools.cache
+@functools.lru_cache(maxsize=2**14)  # 16384
 def estimate_remaining(board: Board) -> int:
     """A lower bound on how many moves are needed to solve.
 
@@ -392,7 +418,6 @@ class MCTSNode:
     depth: int = 0
     remaining_cells: int = 0  # Total remaining
     cleared_cells_in_move: int = 0  # Cleared by last move
-    pruned: bool = False
 
     def __post_init__(self):
         self.children = []
@@ -408,10 +433,14 @@ class MCTSNode:
     def ucb_score(self, exploration=1.41):
         """Calculate UCB score for node selection."""
         if not self.visits:
-            return (float("inf"), -estimate_remaining(self.board))  # higher is better
+            # If not visisted, return UCB of +inf and tie-break with h(n)
+            return (float("inf"), -estimate_remaining(self.board))
         exploit = self.score / self.visits
+
         explore = exploration * math.sqrt(math.log(self.parent.visits) / self.visits)
-        return (not self.pruned, exploit + explore, -estimate_remaining(self.board))
+
+        # Return UCB score, and use the admissible heuristic as tie-breaker
+        return (exploit + explore, -estimate_remaining(self.board))
 
     def expand(self) -> List["MCTSNode"]:
         """Create child nodes for all possible moves."""
@@ -443,19 +472,29 @@ class MCTSNode:
 
         return list(reversed(moves))
 
+    def prune(self):
+        """Prune a node by removing it from the tree."""
 
-def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) -> list:
+        # This removes references and helps Python garbage collector
+        self.parent.children.remove(self)  # Unhook reference
+        self.parent = None  # Unhook this node from the parent
+
+
+def monte_carlo_search(
+    board: Board, iterations=1000, seed=None, verbosity=0, exploration=1.41
+) -> list:
     """Monte Carlo Tree Search to find solution path."""
 
     def vprint(*args, v=0, **kwargs):
+        """Verbose printing function with a filter v."""
         if verbosity >= v:
             print(*args, **kwargs)
 
-    # Yield a greedy solution, which also gives a lower bound on the solution
+    # Yield a greedy solution and obtain a lower bound on the solution
     yield (greedy_solution := list(best_first_search(board, power=None)))
     shortest_path = len(greedy_solution)
 
-    # Rood note for all iterations
+    # Root note for all iterations
     root = MCTSNode(board.copy(), remaining_cells=board.remaining())
 
     for iteration in range(1, iterations + 1):
@@ -466,7 +505,7 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
         node = root
         path = [node]
 
-        # Node has been seen before
+        # While the current node has not been visisted, search down by UCB
         while node.visits > 0:
             # If the node is solved, skip ahead to simulating it.
             # Simulation returns no moves, so we'll yield the path to the node
@@ -480,13 +519,12 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
                     v=3,
                 )
 
-                # Condition happened on the root node. We cannot possibly
-                # do better, so we terminate the algorithm
+                # Pruning condition on the root node. We cannot possibly
+                # do better, so we terminate the algorithm completely.
                 if len(path) == 1:
                     return
 
-                # No point in simulating this node, go to a neighbor instead
-                node.pruned = True  # Will be chosen last by UCB
+                node.prune()
                 path.pop()  # Remove this node from path
                 node = path[-1]  # Reset the node to parent
                 continue
@@ -495,8 +533,12 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
             children = node.expand()
 
             # All children are pruned, go to neighbor
-            if all(child.pruned for child in children):
-                node.pruned = True  # Will be chosen last by UCB
+            if not children:
+                vprint(
+                    f" All children have been pruned. Pruning this node at depth {node.depth}.",
+                    v=3,
+                )
+                node.prune()
                 path.pop()  # Remove this node from path
 
                 # All children of root node were pruned, return
@@ -507,7 +549,7 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
 
             # Any unvisited node will get UCB score +inf and be chosen
             # TODO: The parameter `exploration` for UCB could be tuned
-            node = max(children, key=lambda n: n.ucb_score())
+            node = max(children, key=lambda n: n.ucb_score(exploration=exploration))
             path.append(node)
 
         # Simulate from leaf node of explored tree down to the end of the game
@@ -516,6 +558,7 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
         simulation_moves = list(
             best_first_search(node.board, power=10.0, seed=simulation_seed)
         )
+
         sim_num_cleared = node.remaining_cells
         sim_num_moves = len(simulation_moves)
         vprint(
@@ -564,7 +607,8 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
             )
             cleared_in_path += node.cleared_cells_in_move
 
-    # Extract the best path
+    # Make one final attempt to extract a solution. Follow expected
+    # return down the tree as far as possible, then best-first search
     moves = []
     node = root
     while True:
@@ -576,7 +620,7 @@ def monte_carlo_search(board: Board, iterations=1000, seed=None, verbosity=0) ->
             moves.extend(best_first_search(node.board, power=None))
             break
 
-        # Pure exploitation
+        # Pure exploitation strategy by following expected return
         node = max(children, key=lambda n: n.score / n.visits)
         moves.append(node.move)
 
