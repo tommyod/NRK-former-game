@@ -114,7 +114,7 @@ from dataclasses import dataclass
 import math
 from typing import Optional, List, Set
 import dataclasses
-from heapq import heappush, heappop
+from heapq import heappush, heappop, nlargest
 from collections import deque
 import pytest
 import random
@@ -359,6 +359,76 @@ def estimate_remaining(board: Board) -> int:
 
 
 @dataclass(frozen=True)
+class BeamNode:
+    """Node for beam search with evaluation function."""
+
+    board: Board
+    moves: tuple
+
+    @functools.cache
+    def evaluate(self):
+        if not self.moves:
+            return 0
+
+        moves = len(self.moves)
+        cleared_per_move = self.board.cleared() / moves
+        total_estimate = moves + estimate_remaining(self.board)
+        return (cleared_per_move, -total_estimate)
+
+    def __lt__(self, other):
+        return self.evaluate() < other.evaluate()
+
+
+def beam_search(board: Board, beam_width: int = 3) -> list:
+    """Beam search with specified beam width.
+
+    Maintains only the top beam_width nodes at each depth level.
+    Returns the first solution found.
+
+    Examples
+    --------
+    >>> grid = [[3, 3, 3],
+    ...         [2, 2, 3],
+    ...         [2, 1, 2]]
+    >>> board = Board(grid)
+    >>> moves = beam_search(board)
+    >>> moves  # May not find optimal solution
+    [(0, 0), (2, 1), (1, 0)]
+    """
+    beam = [BeamNode(board.copy(), ())]
+
+    while beam:
+        # Generate all children of current beam
+        next_beam = []
+        for node in beam:
+            if node.board.is_solved():
+                return list(node.moves)
+
+        next_beam = (
+            BeamNode(next_board, node.moves + (move,))
+            for node in beam
+            for (move, next_board) in node.board.children()
+        )
+
+        # Keep only the best beam_width nodes
+        beam = nlargest(n=beam_width, iterable=next_beam)
+
+
+def anytime_beam_search(board, power=1):
+    """Run beam search with width=1,2,4,8,...,2**power, yielding solutions."""
+
+    shortest_path = float("inf")
+    for p in range(power + 1):
+        moves = beam_search(board, beam_width=2**p)
+        if len(moves) < shortest_path:
+            yield moves
+            shortest_path = len(moves)
+
+
+# =============================================================================
+
+
+@dataclass(frozen=True)
 class HeuristicNode:
     """Make board states comparable for search."""
 
@@ -413,7 +483,8 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
         current_g = len(current.moves)  # g(node) = number of moves
         popped_counter += 1
 
-        if popped_counter % 10_000 == 0 and verbose:
+        if popped_counter % max((max_nodes // 100), 1) == 0 and verbose:
+            print(f"Nodes popped: {current.heuristic()} Shortest path: {shortest_path}")
             print(f"Heuristic function value: {current.heuristic()}")
             print(f"Number of moves (depth): {len(current.moves)}")
             print(f"Nodes popped: {popped_counter}")
@@ -464,14 +535,6 @@ class MCTSNode:
 
     def __post_init__(self):
         self.children = []
-
-    def __hash__(self):
-        return hash(str(self.board.grid))
-
-    def __eq__(self, other):
-        if not isinstance(other, MCTSNode):
-            return False
-        return str(self.board.grid) == str(other.board.grid)
 
     def ucb_score(self, exploration=1.41):
         """Calculate UCB score for node selection."""

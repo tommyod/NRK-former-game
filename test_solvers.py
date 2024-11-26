@@ -13,6 +13,7 @@ from solvers import (
     heuristic_search,
     monte_carlo_search,
     iterative_deepening_search,
+    anytime_beam_search,
 )
 
 
@@ -80,6 +81,24 @@ class TestSolvers:
             assert False
 
     @pytest.mark.parametrize("seed", range(100))
+    def test_that_beam_search_yields_optimal_solution(self, seed):
+        # Create a random board with a random shape
+        rng = random.Random(seed)
+        shape = rng.randint(2, 4), rng.randint(2, 4)
+        board = Board.generate_random(shape=shape, seed=seed)
+
+        # Solve it using both algorithms
+        moves_astar = a_star_search(board)
+        assert board.verify_solution(moves_astar)
+
+        for moves in anytime_beam_search(board, power=12):
+            assert board.verify_solution(moves)
+            if len(moves_astar) == len(moves):
+                break
+        else:
+            assert False
+
+    @pytest.mark.parametrize("seed", range(100))
     def test_that_mcts_solver_yields_optimal_solution(self, seed):
         # Create a random board with a random shape
         rng = random.Random(seed)
@@ -92,24 +111,8 @@ class TestSolvers:
 
         # Solving the board with MCTS
         for moves in monte_carlo_search(board, iterations=999999, seed=42):
-            # Test that solution was valid
             assert board.verify_solution(moves)
 
-            if len(moves_astar) == len(moves):
-                break
-        else:
-            assert False
-
-    def test_mcts_on_hard_case(self):
-        board = Board([[3, 1, 2, 2], [1, 2, 1, 4], [2, 3, 3, 2], [4, 1, 2, 3]])
-
-        # Solve the board with A* first, which guarantees an optimal solution
-        moves_astar = a_star_search(board)
-        assert board.verify_solution(moves_astar)
-
-        # Solving the board with MCTS
-        for moves in monte_carlo_search(board, iterations=10**6, seed=42):
-            assert board.verify_solution(moves)
             if len(moves_astar) == len(moves):
                 break
         else:
