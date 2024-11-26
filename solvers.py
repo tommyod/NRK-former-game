@@ -505,7 +505,7 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
         # The board is solved. If the path is shorter than what we have,
         # then yield it and update the lower bound.
         if current.board.is_solved() and len(current.moves) < shortest_path:
-            yield current.moves
+            yield list(current.moves)
             shortest_path = len(current.moves)
 
         # Go through all children, created by applying a single move
@@ -522,7 +522,8 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
 # =============================================================================
 
 
-@dataclasses.dataclass(frozen=True)
+# We need to asssign to children after creation, so we set frozen=False
+@dataclasses.dataclass(frozen=False)
 class MCTSNode:
     """Make board states comparable for tree search."""
 
