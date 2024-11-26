@@ -110,7 +110,6 @@ True
 
 """
 
-from dataclasses import dataclass
 import math
 from typing import Optional, List, Set
 import dataclasses
@@ -243,7 +242,7 @@ def iterative_deepening_search(board: Board) -> list:
 # =============================================================================
 
 
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class AStarNode:
     """Make board states comparable for search."""
 
@@ -300,7 +299,7 @@ def a_star_search(board: Board) -> list:
                 heappush(heap, next_node)
 
 
-@functools.lru_cache(maxsize=2**10)  # 1024
+@functools.lru_cache(maxsize=2**8)  # 256
 def consecutive_groups(tuple_):
     """Count how many consecutive groups of True there are.
 
@@ -358,14 +357,14 @@ def estimate_remaining(board: Board) -> int:
 # =============================================================================
 
 
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class BeamNode:
     """Node for beam search with evaluation function."""
 
     board: Board
     moves: tuple
 
-    @functools.cache
+    @functools.cached_property
     def evaluate(self):
         if not self.moves:
             return 0
@@ -376,7 +375,7 @@ class BeamNode:
         return (cleared_per_move, -total_estimate)
 
     def __lt__(self, other):
-        return self.evaluate() < other.evaluate()
+        return self.evaluate < other.evaluate
 
 
 def beam_search(board: Board, beam_width: int = 3) -> list:
@@ -398,12 +397,12 @@ def beam_search(board: Board, beam_width: int = 3) -> list:
     beam = [BeamNode(board.copy(), ())]
 
     while beam:
-        # Generate all children of current beam
-        next_beam = []
+        # Check if any are solved
         for node in beam:
             if node.board.is_solved():
                 return list(node.moves)
 
+        # Generate all children of current beam
         next_beam = (
             BeamNode(next_board, node.moves + (move,))
             for node in beam
@@ -428,14 +427,18 @@ def anytime_beam_search(board, power=1):
 # =============================================================================
 
 
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class HeuristicNode:
     """Make board states comparable for search."""
 
     board: Board
     moves: tuple
 
-    @functools.cache
+    # Here we have to used `cached_property` rather than `cache`, because
+    # 'cache' creates one large dictionary in memory that points to all
+    # instances of the heuristic nodes. If we use `cache` then the nodes
+    # are never cleared from memory
+    @functools.cached_property
     def heuristic(self):
         # No moves have been made, special case
         if not self.moves:
@@ -452,7 +455,7 @@ class HeuristicNode:
         return (-cleared_per_move, -moves, total_estimate)
 
     def __lt__(self, other):
-        return self.heuristic() < other.heuristic()
+        return self.heuristic < other.heuristic
 
 
 def heuristic_search(board: Board, verbose=False, max_nodes=0):
@@ -502,7 +505,7 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
         # The board is solved. If the path is shorter than what we have,
         # then yield it and update the lower bound.
         if current.board.is_solved() and len(current.moves) < shortest_path:
-            yield list(current.moves)
+            yield current.moves
             shortest_path = len(current.moves)
 
         # Go through all children, created by applying a single move
@@ -519,7 +522,7 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
 # =============================================================================
 
 
-@dataclass
+@dataclasses.dataclass
 class MCTSNode:
     """Make board states comparable for tree search."""
 
