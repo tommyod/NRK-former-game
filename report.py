@@ -4,7 +4,7 @@ Investigate solvers and create figures for reporting.
 
 import time
 from typing import Callable, List
-from board import Board, LabelInvariantBoard, CanonicalBoard
+from board import Board, LabelInvariantBoard
 from solvers import (
     breadth_first_search,
     a_star_search,
