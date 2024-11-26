@@ -74,12 +74,12 @@ class TestBoard:
     def test_board_statistics(self, complex_board):
         """Test statistical methods of the board"""
         assert len(complex_board) == 9  # 3x3 board
-        assert complex_board.remaining() == 9
-        assert complex_board.unique_remaining() == 4
+        assert complex_board.remaining == 9
+        assert complex_board.unique_remaining == 4
 
         clicked = complex_board.click(2, 0)
-        assert clicked.remaining() == 6
-        assert clicked.unique_remaining() == 3
+        assert clicked.remaining == 6
+        assert clicked.unique_remaining == 3
 
     def test_canonicalization(self):
         """Test board canonicalization"""
@@ -98,11 +98,11 @@ class TestBoard:
 
     def test_is_solved(self, simple_board):
         """Test win condition detection"""
-        assert not simple_board.is_solved()
+        assert not simple_board.is_solved
 
         # Create a solved board
         solved = Board([[0, 0], [0, 0]])
-        assert solved.is_solved()
+        assert solved.is_solved
 
     def test_board_copy(self, complex_board):
         """Test that board copying works correctly"""
