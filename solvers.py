@@ -31,6 +31,13 @@ Breadth-first search (BFS)
 [(0, 0), (2, 1), (1, 0)]
 
 
+Iterative deepening search
+--------------------------
+
+>>> iterative_deepening_search(board)
+[(0, 0), (2, 1), (1, 0)]
+
+
 A* search
 ---------
 
