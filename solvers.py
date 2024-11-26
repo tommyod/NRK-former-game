@@ -522,7 +522,7 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
 # =============================================================================
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class MCTSNode:
     """Make board states comparable for tree search."""
 
