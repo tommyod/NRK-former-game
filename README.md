@@ -38,11 +38,11 @@ Statistics can be retrieved using these methods:
 ```pycon
 >>> len(board)  # The board has size 2 x 2 = 4
 4
->>> board.remaining()  # There are three cells remaining (non-zero)
+>>> board.remaining  # There are three cells remaining (non-zero)
 3
->>> board.cleared()  # One cell has been cleared
+>>> board.cleared  # One cell has been cleared
 1
->>> board.unique_remaining()  # There are two unique remaining numbers
+>>> board.unique_remaining  # There are two unique remaining numbers
 2
 
 ```
@@ -79,7 +79,7 @@ There are no guarantees that this results in an optimal solution.
 [(2, 1), (2, 2), (2, 2), (2, 1), (2, 1), (2, 0), (2, 0), (2, 0)]
 >>> for move in moves:
 ...     board = board.click(*move)
->>> board.is_solved()
+>>> board.is_solved
 True
 
 ```

@@ -15,7 +15,7 @@ The board below can be solved in 3 moves, but best-first uses 4 moves.
 [(0, 0), (1, 0), (2, 2), (2, 1)]
 >>> for move in moves:
 ...     board = board.click(*move)
->>> board.is_solved()
+>>> board.is_solved
 True
 
 
@@ -138,7 +138,7 @@ def best_first_search(board: Board, power=None, seed=None):
     while stack:
         board = stack.pop()
 
-        if board.is_solved():
+        if board.is_solved:
             return
 
         # Go through all children and record how many are removed
@@ -179,7 +179,7 @@ def breadth_first_search(board: Board) -> list:
         current_board, moves = queue.popleft()
 
         # Check if we've found a solution
-        if current_board.is_solved():
+        if current_board.is_solved:
             return moves
 
         # Try all possible moves from current state
@@ -208,7 +208,7 @@ def depth_limited_search(board: Board, depth_limit: int) -> Optional[list]:
     """
 
     def dfs(board: Board, depth: int, moves: list) -> Optional[list]:
-        if board.is_solved():
+        if board.is_solved:
             return moves
 
         if depth >= depth_limit:
@@ -260,7 +260,7 @@ class AStarNode:
         # Return (admissible_heuristic(), non_admissible(), non_admissible())
         # The overall result is still admissible, but the second and third
         # component of the tuple act as tie-breakers
-        cleared_per_move = self.board.cleared() / num_moves
+        cleared_per_move = self.board.cleared / num_moves
         return (self.g() + self.h(), -cleared_per_move, -num_moves)
 
     def __lt__(self, other):
@@ -284,7 +284,7 @@ def a_star_search(board: Board) -> list:
             continue
 
         # The board is solved, return the list of moves
-        if current.board.is_solved():
+        if current.board.is_solved:
             return list(current.moves)
 
         # Go through all children, created by applying a single move
@@ -370,7 +370,7 @@ class BeamNode:
             return 0
 
         moves = len(self.moves)
-        cleared_per_move = self.board.cleared() / moves
+        cleared_per_move = self.board.cleared / moves
         total_estimate = moves + estimate_remaining(self.board)
         return (cleared_per_move, -total_estimate)
 
@@ -399,7 +399,7 @@ def beam_search(board: Board, beam_width: int = 3) -> list:
     while beam:
         # Check if any are solved
         for node in beam:
-            if node.board.is_solved():
+            if node.board.is_solved:
                 return list(node.moves)
 
         # Generate all children of current beam
@@ -448,7 +448,7 @@ class HeuristicNode:
 
         # Clearing 10 nodes in 2 moves is better than 5 in 1 move
         bias = 1  # Bias that can be used to search deep first
-        cleared_per_move = self.board.cleared() / moves + bias * moves
+        cleared_per_move = self.board.cleared / moves + bias * moves
         total_estimate = moves + estimate_remaining(self.board)
 
         # Negate signs, because lower is better in heapq
@@ -504,7 +504,7 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
 
         # The board is solved. If the path is shorter than what we have,
         # then yield it and update the lower bound.
-        if current.board.is_solved() and len(current.moves) < shortest_path:
+        if current.board.is_solved and len(current.moves) < shortest_path:
             yield list(current.moves)
             shortest_path = len(current.moves)
 
@@ -605,7 +605,7 @@ def monte_carlo_search(
     shortest_path = len(greedy_solution)
 
     # Root note for all iterations
-    root = MCTSNode(board.copy(), remaining_cells=board.remaining())
+    root = MCTSNode(board.copy(), remaining_cells=board.remaining)
 
     for iteration in range(1, iterations + 1):
         if verbosity >= 2:
@@ -619,7 +619,7 @@ def monte_carlo_search(
         while node.visits > 0:
             # If the node is solved, skip ahead to simulating it.
             # Simulation returns no moves, so we'll yield the path to the node
-            if node.board.is_solved():
+            if node.board.is_solved:
                 break
 
             # We cannot possibly improve on what we already have
@@ -722,7 +722,7 @@ def monte_carlo_search(
     moves = []
     node = root
     while True:
-        if node.board.is_solved():
+        if node.board.is_solved:
             break
 
         children = node.expand()

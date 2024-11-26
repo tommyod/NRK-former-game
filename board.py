@@ -33,11 +33,11 @@ Statistics can be retrieved using these methods:
 
     >>> len(board)  # The board has size 2 x 2 = 4
     4
-    >>> board.remaining()  # There are three cells remaining (non-zero)
+    >>> board.remaining  # There are three cells remaining (non-zero)
     3
-    >>> board.cleared()  # One cell has been cleared
+    >>> board.cleared  # One cell has been cleared
     1
-    >>> board.unique_remaining()  # There are two unique remaining numbers
+    >>> board.unique_remaining  # There are two unique remaining numbers
     2
 
 The Board instances are immutable - a new instance is always returned.
@@ -253,6 +253,7 @@ class Board:
         """Convert the board to an integer."""
         return int("".join(str(num) for row in self.grid for num in row))
 
+    @functools.cached_property
     def unique_remaining(self):
         """Count number of unique non-zeros remaining in the board.
 
@@ -261,9 +262,9 @@ class Board:
         >>> grid = [[1, 2, 3],
         ...         [2, 3, 3],
         ...         [4, 4, 4]]
-        >>> Board(grid).click(0, 0).unique_remaining()
+        >>> Board(grid).click(0, 0).unique_remaining
         3
-        >>> Board(grid).click(1, 0).unique_remaining()
+        >>> Board(grid).click(1, 0).unique_remaining
         4
         """
         return len(set(self.grid[i][j] for (i, j) in self.yield_clicks()))
@@ -308,7 +309,7 @@ class Board:
         """
         seen = set()  # Do not yield the same board twice
 
-        if self.is_solved():
+        if self.is_solved:
             return
 
         for i, j in self.yield_clicks():
@@ -386,12 +387,13 @@ class Board:
 
         return self
 
-    @functools.cache
+    @functools.cached_property
     def is_solved(self) -> bool:
         """Check if the board is cleared (all cells are zero)."""
         # Only need to check bottom row because of gravity
         return all(cell == 0 for cell in self.grid[-1])
 
+    @functools.cached_property
     def remaining(self) -> int:
         """Count number of remaining non-cleared (non-zero) cells.
 
@@ -400,17 +402,17 @@ class Board:
         >>> grid = [[1, 2, 3],
         ...         [2, 3, 3],
         ...         [4, 4, 4]]
-        >>> Board(grid).remaining()
+        >>> Board(grid).remaining
         9
-        >>> Board(grid).click(2, 2).remaining()
+        >>> Board(grid).click(2, 2).remaining
         6
         """
         return sum(cell > 0 for row in self.grid for cell in row)
 
-    @functools.cache
+    @functools.cached_property
     def cleared(self) -> int:
         """Returns the number of cleared cells (zero cells)."""
-        return len(self) - self.remaining()
+        return len(self) - self.remaining
 
     def display(self, click=None):
         """Print current board state."""
@@ -452,7 +454,7 @@ class Board:
         board = self.copy()
         for move in moves:
             board = board.click(*move)
-        return board.is_solved()
+        return board.is_solved
 
     def plot(self, ax=None, click=None, n_colors=None, show_values=False):
         """Plot the current board state using matplotlib.
