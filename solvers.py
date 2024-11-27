@@ -268,7 +268,7 @@ def iterative_deepening_search(board: Board) -> list:
     [(0, 0), (2, 1), (1, 0)]
     """
     for depth in itertools.count(0):
-        if result := depth_limited_search(board, depth):
+        if result := depth_limited_search(board, depth_limit=depth):
             return result
 
 
