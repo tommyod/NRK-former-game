@@ -21,16 +21,19 @@ import itertools
 from collections import deque
 from instances import NRK_boards
 import random
+import functools
 
 
-def time_solver(solver: Callable, num_boards: int = 10, relabel=False) -> List[float]:
+def yield_board_shapes():
+    """Yield board shapes of increasing size."""
+    for size in itertools.count(2):
+        yield (size, size)
+        yield (size, size + 1)
+        yield (size + 1, size)
+
+
+def time_solver(solver: Callable, num_boards: int = 10, relabel=False, max_time=10) -> List[float]:
     """Time the performance of a board solver across different board sizes."""
-
-    def yield_board_shapes():
-        for size in itertools.count(1):
-            yield (size, size)
-            yield (size, size + 1)
-            yield (size + 1, size)
 
     for shape in yield_board_shapes():
         times = []
@@ -50,13 +53,17 @@ def time_solver(solver: Callable, num_boards: int = 10, relabel=False) -> List[f
             # Verify that solutions yield the solved board
             for move in moves:
                 board = board.click(*move)
-            assert board.is_solved()
+            assert board.is_solved
 
             times.append(elapsed_time)
 
         # Use geometric mean since numbers are on vastly different
         # orders of magnitude
         yield shape, statistics.geometric_mean(times)
+        
+        # Stop here
+        if statistics.geometric_mean(times) > max_time:
+            return
 
 
 def bfs_counter(board: Board, max_depth=1) -> list:
@@ -83,7 +90,7 @@ def bfs_counter(board: Board, max_depth=1) -> list:
             current_counter += 1
 
         # Check if we've found a solution
-        if current_board.is_solved():
+        if current_board.is_solved:
             return
 
         if current_board.depth > max_depth:
@@ -108,7 +115,7 @@ def dfs_counter(board: Board, max_depth=1) -> int:
         depth_counts[depth] += 1
 
         # Base cases
-        if current_board.is_solved() or depth >= max_depth:
+        if current_board.is_solved or depth >= max_depth:
             return
 
         # Recursive case: explore all children
@@ -211,32 +218,37 @@ def plot_solution(board, moves):
 if __name__ == "__main__":
     # Solve random boards to optimality and create a plot
     if False:
-        plt.figure(figsize=(6, 3))
+        plt.figure(figsize=(7, 3))
         plt.title("Solving random boards to optimality")
-        N = 3 * 5
+        
+        # Set time limit and number of boards here
+        time_solver = functools.partial(time_solver, 
+                                        max_time=2, 
+                                        num_boards=5)
 
-        n = N
-        solutions = list(itertools.islice(time_solver(iterative_deepening_search), n))
+        solutions = list(time_solver(iterative_deepening_search))
+        n = len(solutions)
         times = [time for (_, time) in solutions]
         plt.semilogy(times, label="IDS")
 
-        n = N
-        solutions = list(itertools.islice(time_solver(breadth_first_search), n))
+        solutions = list(time_solver(breadth_first_search))
+        n = max(n, len(solutions))
         times = [time for (_, time) in solutions]
         plt.semilogy(times, label="BFS")
 
-        n = N + 1
-        solutions = list(itertools.islice(time_solver(a_star_search), n))
+
+        solutions = list(time_solver(a_star_search))
+        n = max(n, len(solutions))
         times = [time for (_, time) in solutions]
         plt.semilogy(times, label="A*")
 
-        n = N + 1
-        solutions = list(itertools.islice(time_solver(a_star_search, relabel=True), n))
+        solutions = list(time_solver(a_star_search, relabel=True))
+        n = max(n, len(solutions))
         times = [time for (_, time) in solutions]
-        shapes = [shape for (shape, _) in solutions]
         plt.semilogy(times, label="A* (relabel)")
 
-        plt.xticks(list(range(n)), shapes)
+        shapes = list(itertools.islice(yield_board_shapes(), n))
+        plt.xticks(list(range(n)), shapes, rotation=30)
         plt.legend()
 
         plt.xlabel("Board size")
