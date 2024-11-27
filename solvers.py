@@ -130,7 +130,7 @@ import functools
 from board import Board
 
 
-def best_first_search(board: Board, power=None, seed=None):
+def best_first_search(board: Board, *, power=None, seed=None):
     """Greedy search. Choose the move that clears the most cells.
 
     If power is a number, then the algorithm is no longer deterministic.
@@ -216,7 +216,7 @@ def breadth_first_search(board: Board) -> list:
             queue.append((next_board, moves + [(i, j)]))
 
 
-def depth_limited_search(board: Board, depth_limit: int) -> Optional[list]:
+def depth_limited_search(board: Board, *, depth_limit: int) -> Optional[list]:
     """Recursive depth-limited search implementation. Will not find the optimal
     solution unless it's length equals the depth limit.
 
@@ -416,14 +416,13 @@ class BeamNode:
 
         moves = len(self.moves)
         cleared_per_move = self.board.cleared / moves
-        total_estimate = moves + estimate_remaining(self.board)
-        return (cleared_per_move, -total_estimate)
+        return (cleared_per_move, -estimate_remaining(self.board))
 
     def __lt__(self, other):
         return self.evaluate < other.evaluate
 
 
-def beam_search(board: Board, beam_width: int = 3) -> list:
+def beam_search(board: Board, *, beam_width: int = 3) -> list:
     """Beam search with specified beam width.
 
     Maintains only the top beam_width nodes at each depth level.
@@ -458,8 +457,9 @@ def beam_search(board: Board, beam_width: int = 3) -> list:
         beam = nlargest(n=beam_width, iterable=next_beam)
 
 
-def anytime_beam_search(board, power=1):
+def anytime_beam_search(board, *, power=1, verbose=False):
     """Run beam search with width=1,2,4,8,...,2**power, yielding solutions.
+    If power is None, then power will be increased until no improvement occurs.
 
     Examples
     --------
@@ -472,13 +472,33 @@ def anytime_beam_search(board, power=1):
     Solution of length 5: [(1, 0), (2, 1), (0, 3), (1, 3), (2, 3)]
     Solution of length 3: [(2, 3), (1, 0), (2, 1)]
     """
-
+    power_is_None = power is None
     shortest_path = float("inf")
-    for p in range(power + 1):
+    no_improvement_count = 0
+
+    for p in itertools.count(0):
+        # Break conditions
+        if not power_is_None and p > power:
+            break
+
+        if verbose:
+            print(f"Running beam search with beam_width={2**p}")
+
         moves = beam_search(board, beam_width=2**p)
-        if len(moves) < shortest_path:
+
+        # Only yield if we found a better solution
+        if moves and len(moves) < shortest_path:
+            if verbose:
+                print(f" Found new best solution with length: {len(moves)}")
             yield moves
             shortest_path = len(moves)
+            no_improvement_count = 0
+        else:
+            no_improvement_count += 1
+
+        # If power is None, stop after no improvements for several
+        if power_is_None and no_improvement_count >= 3:
+            break
 
 
 # =============================================================================
@@ -504,7 +524,7 @@ class HeuristicNode:
         moves = len(self.moves)
 
         # Clearing 10 nodes in 2 moves is better than 5 in 1 move
-        bias = 1  # Bias that can be used to search deep first
+        bias = 0.5  # Bias that can be used to search deep first
         cleared_per_move = self.board.cleared / moves + bias * moves
         total_estimate = moves + estimate_remaining(self.board)
 
@@ -531,7 +551,7 @@ def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=F
     ...     assert board.verify_solution(moves)
     ...     print(f'Solution of length {len(moves)}: {moves}')
     Solution of length 5: [(1, 0), (2, 1), (2, 3), (2, 3), (2, 3)]
-    Solution of length 4: [(1, 0), (0, 3), (2, 3), (2, 1)]
+    Solution of length 4: [(1, 0), (2, 3), (2, 1), (2, 3)]
     Solution of length 3: [(2, 3), (1, 0), (2, 1)]
     """
     shortest_path = shortest_path or float("inf")
@@ -556,7 +576,9 @@ def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=F
         popped_counter += 1
 
         if popped_counter % max((max_nodes // 100), 1) == 0 and verbose:
-            print(f"Nodes popped:{popped_counter}  Shortest path:{shortest_path}")
+            print(
+                f"Nodes popped:{popped_counter}  Progress:{popped_counter/max_nodes:.1%}  Shortest path:{shortest_path}"
+            )
             print(f" Heuristic function value:{current.heuristic}")
             print(
                 f" Depth:{len(current.moves)}  In queue:{len(heap)}  Seen:{len(g_scores)}"
@@ -653,6 +675,12 @@ class MCTSNode:
         # Remove references and help garbage collector
         self.parent.children.remove(self)  # Unhook reference
         self.parent = None  # Unhook this node from the parent
+
+    def size(self):
+        """Return the size of the tree, counting from this node down."""
+        if not self.children and self.visits:
+            return 1
+        return sum(child.size() for child in self.children)
 
 
 def monte_carlo_search(
@@ -766,7 +794,7 @@ def monte_carlo_search(
 
         if verbosity == 1 and iteration % max((iterations // 100), 1) == 0:
             vprint(
-                f"Iter: {iteration} (sim. @ d={node.depth}, cleared/move @ sim={sim_num_cleared / sim_num_moves:.3f}) ({shortest_path=})",
+                f"Iter: {iteration} ({iteration/iterations:.1%}) (sim. @ d={node.depth}, cleared/move @ sim={sim_num_cleared / sim_num_moves:.3f}) (treesize: {root.size()}) ({shortest_path=})",
                 v=1,
             )
 
