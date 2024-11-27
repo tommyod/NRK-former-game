@@ -556,7 +556,7 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
         popped_counter += 1
 
         if popped_counter % max((max_nodes // 100), 1) == 0 and verbose:
-            print(f"Nodes popped: {current.heuristic} Shortest path: {shortest_path}")
+            print(f"Nodes popped: {popped_counter} Shortest path: {shortest_path}")
             print(f"Heuristic function value: {current.heuristic}")
             print(f"Number of moves (depth): {len(current.moves)}")
             print(f"Nodes popped: {popped_counter}")
