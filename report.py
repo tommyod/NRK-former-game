@@ -345,10 +345,6 @@ if __name__ == "__main__":
             plt.savefig(f"best_solution_found_board_no_{board_no}.png", dpi=200)
             plt.show()
 
-            import gc
-
-            gc.collect()
-
     # Beam search on NRK instances
     if False:
         plt.figure(figsize=(6, 3))
