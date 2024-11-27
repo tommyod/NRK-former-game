@@ -515,7 +515,7 @@ class HeuristicNode:
         return self.heuristic < other.heuristic
 
 
-def heuristic_search(board: Board, verbose=False, max_nodes=0):
+def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=False):
     """A heuristic search that yields solutions as they are found.
 
     If run long enough, then this function will eventually find the optimal
@@ -534,14 +534,14 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
     Solution of length 4: [(1, 0), (0, 3), (2, 3), (2, 1)]
     Solution of length 3: [(2, 3), (1, 0), (2, 1)]
     """
-    board = board.copy()
+    shortest_path = shortest_path or float("inf")
 
     # Yield a greedy solution, which also gives a lower bound on the solution
     yield (greedy_solution := list(best_first_search(board)))
-    shortest_path = len(greedy_solution)
+    shortest_path = min(len(greedy_solution), shortest_path)
 
     # Add the board to the heap
-    heap = [HeuristicNode(board, moves=())]
+    heap = [HeuristicNode(board.copy(), moves=())]
     g_scores = {board: 0}  # Keep track of nodes seen and number of moves
 
     popped_counter = 0
@@ -558,7 +558,9 @@ def heuristic_search(board: Board, verbose=False, max_nodes=0):
         if popped_counter % max((max_nodes // 100), 1) == 0 and verbose:
             print(f"Nodes popped:{popped_counter}  Shortest path:{shortest_path}")
             print(f" Heuristic function value:{current.heuristic}")
-            print(f" Depth:{len(current.moves)}  In queue:{len(heap)}  Seen:{len(g_scores)}")
+            print(
+                f" Depth:{len(current.moves)}  In queue:{len(heap)}  Seen:{len(g_scores)}"
+            )
 
         # The lower bound f(n) = g(n) + h(n) >= best we've seen, so skip it
         if current_g + estimate_remaining(current.board) >= shortest_path:
@@ -639,9 +641,7 @@ class MCTSNode:
 
     def construct_moves(self):
         """Return a list of moves from the root to this node."""
-
-        moves = []
-        node = self
+        moves, node = [], self
         while node.parent is not None:
             moves.append(node.move)
             node = node.parent
@@ -650,14 +650,18 @@ class MCTSNode:
 
     def prune(self):
         """Prune a node by removing it from the tree."""
-
-        # This removes references and helps Python garbage collector
+        # Remove references and help garbage collector
         self.parent.children.remove(self)  # Unhook reference
         self.parent = None  # Unhook this node from the parent
 
 
 def monte_carlo_search(
-    board: Board, iterations=1000, seed=None, verbosity=0, exploration=1.41
+    board: Board,
+    *,
+    iterations=1000,
+    seed=None,
+    verbosity=0,
+    shortest_path=None,
 ) -> list:
     """Monte Carlo Tree Search to find solution path.
 
@@ -678,9 +682,11 @@ def monte_carlo_search(
         if verbosity >= v:
             print(*args, **kwargs)
 
-    # Yield a greedy solution and obtain a lower bound on the solution
-    yield (greedy_solution := list(best_first_search(board, power=None)))
-    shortest_path = len(greedy_solution)
+    shortest_path = shortest_path or float("inf")
+
+    # Yield a greedy solution, which also gives a lower bound on the solution
+    yield (greedy_solution := list(best_first_search(board)))
+    shortest_path = min(len(greedy_solution), shortest_path)
 
     # Root note for all iterations
     root = MCTSNode(board.copy(), remaining_cells=board.remaining)
@@ -737,7 +743,7 @@ def monte_carlo_search(
 
             # Any unvisited node will get UCB score +inf and be chosen
             # TODO: The parameter `exploration` for UCB could be tuned
-            node = max(children, key=lambda n: n.ucb_score(exploration=exploration))
+            node = max(children, key=lambda n: n.ucb_score(exploration=1.41))
             path.append(node)
 
         # Simulate from leaf node of explored tree down to the end of the game
