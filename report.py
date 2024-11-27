@@ -32,7 +32,9 @@ def yield_board_shapes():
         yield (size + 1, size)
 
 
-def time_solver(solver: Callable, num_boards: int = 10, relabel=False, max_time=10) -> List[float]:
+def time_solver(
+    solver: Callable, num_boards: int = 10, relabel=False, max_time=10
+) -> List[float]:
     """Time the performance of a board solver across different board sizes."""
 
     for shape in yield_board_shapes():
@@ -60,7 +62,7 @@ def time_solver(solver: Callable, num_boards: int = 10, relabel=False, max_time=
         # Use geometric mean since numbers are on vastly different
         # orders of magnitude
         yield shape, statistics.geometric_mean(times)
-        
+
         # Stop here
         if statistics.geometric_mean(times) > max_time:
             return
@@ -220,11 +222,9 @@ if __name__ == "__main__":
     if False:
         plt.figure(figsize=(7, 3))
         plt.title("Solving random boards to optimality")
-        
+
         # Set time limit and number of boards here
-        time_solver = functools.partial(time_solver, 
-                                        max_time=2, 
-                                        num_boards=5)
+        time_solver = functools.partial(time_solver, max_time=2, num_boards=5)
 
         solutions = list(time_solver(iterative_deepening_search))
         n = len(solutions)
@@ -235,7 +235,6 @@ if __name__ == "__main__":
         n = max(n, len(solutions))
         times = [time for (_, time) in solutions]
         plt.semilogy(times, label="BFS")
-
 
         solutions = list(time_solver(a_star_search))
         n = max(n, len(solutions))
