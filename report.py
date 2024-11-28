@@ -21,16 +21,21 @@ import itertools
 from collections import deque
 from instances import NRK_boards
 import random
+import functools
 
 
-def time_solver(solver: Callable, num_boards: int = 10, relabel=False) -> List[float]:
+def yield_board_shapes():
+    """Yield board shapes of increasing size."""
+    for size in itertools.count(2):
+        yield (size, size)
+        yield (size, size + 1)
+        yield (size + 1, size)
+
+
+def time_solver(
+    solver: Callable, num_boards: int = 10, relabel=False, max_time=10
+) -> List[float]:
     """Time the performance of a board solver across different board sizes."""
-
-    def yield_board_shapes():
-        for size in itertools.count(1):
-            yield (size, size)
-            yield (size, size + 1)
-            yield (size + 1, size)
 
     for shape in yield_board_shapes():
         times = []
@@ -50,13 +55,17 @@ def time_solver(solver: Callable, num_boards: int = 10, relabel=False) -> List[f
             # Verify that solutions yield the solved board
             for move in moves:
                 board = board.click(*move)
-            assert board.is_solved()
+            assert board.is_solved
 
             times.append(elapsed_time)
 
         # Use geometric mean since numbers are on vastly different
         # orders of magnitude
         yield shape, statistics.geometric_mean(times)
+
+        # Stop here
+        if statistics.geometric_mean(times) > max_time:
+            return
 
 
 def bfs_counter(board: Board, max_depth=1) -> list:
@@ -83,7 +92,7 @@ def bfs_counter(board: Board, max_depth=1) -> list:
             current_counter += 1
 
         # Check if we've found a solution
-        if current_board.is_solved():
+        if current_board.is_solved:
             return
 
         if current_board.depth > max_depth:
@@ -108,7 +117,7 @@ def dfs_counter(board: Board, max_depth=1) -> int:
         depth_counts[depth] += 1
 
         # Base cases
-        if current_board.is_solved() or depth >= max_depth:
+        if current_board.is_solved or depth >= max_depth:
             return
 
         # Recursive case: explore all children
@@ -211,32 +220,34 @@ def plot_solution(board, moves):
 if __name__ == "__main__":
     # Solve random boards to optimality and create a plot
     if False:
-        plt.figure(figsize=(6, 3))
+        plt.figure(figsize=(7, 3))
         plt.title("Solving random boards to optimality")
-        N = 3 * 5
 
-        n = N
-        solutions = list(itertools.islice(time_solver(iterative_deepening_search), n))
+        # Set time limit and number of boards here
+        time_solver = functools.partial(time_solver, max_time=2, num_boards=5)
+
+        solutions = list(time_solver(iterative_deepening_search))
+        n = len(solutions)
         times = [time for (_, time) in solutions]
         plt.semilogy(times, label="IDS")
 
-        n = N
-        solutions = list(itertools.islice(time_solver(breadth_first_search), n))
+        solutions = list(time_solver(breadth_first_search))
+        n = max(n, len(solutions))
         times = [time for (_, time) in solutions]
         plt.semilogy(times, label="BFS")
 
-        n = N + 1
-        solutions = list(itertools.islice(time_solver(a_star_search), n))
+        solutions = list(time_solver(a_star_search))
+        n = max(n, len(solutions))
         times = [time for (_, time) in solutions]
         plt.semilogy(times, label="A*")
 
-        n = N + 1
-        solutions = list(itertools.islice(time_solver(a_star_search, relabel=True), n))
+        solutions = list(time_solver(a_star_search, relabel=True))
+        n = max(n, len(solutions))
         times = [time for (_, time) in solutions]
-        shapes = [shape for (shape, _) in solutions]
         plt.semilogy(times, label="A* (relabel)")
 
-        plt.xticks(list(range(n)), shapes)
+        shapes = list(itertools.islice(yield_board_shapes(), n))
+        plt.xticks(list(range(n)), shapes, rotation=30)
         plt.legend()
 
         plt.xlabel("Board size")
@@ -249,7 +260,7 @@ if __name__ == "__main__":
     # Investigate the branching factor of a board instance
     if False:
         board = NRK_boards[26].board
-        for max_depth in range(1, 6):
+        for max_depth in range(1, 5):
             print()
             depth_counts = dfs_counter(board, max_depth=max_depth)
 
@@ -267,16 +278,13 @@ if __name__ == "__main__":
     # Plot solution times on NRK boards
     if False:
         for board_no, instance in sorted(NRK_boards.items()):
-            if board_no != 23:
-                continue
-
             plt.figure(figsize=(6, 3))
             plt.title("Comparing search algorithms")
             board = Board(instance.board.grid)
             print(f"Board number: {board_no} (best known: {instance.best}) \n{board}")
 
             print("Running beam search")
-            power = 13
+            power = 15
             st = time.perf_counter()
             results = list(search_timer(anytime_beam_search, board, power=power))
             print(f"Ran in: {time.perf_counter() - st:.2f}")
@@ -286,7 +294,7 @@ if __name__ == "__main__":
             best_moves = results[-1][1]
 
             print("Running heuristic search")
-            max_nodes = 500_000
+            max_nodes = 4_000_000
             st = time.perf_counter()
             results = list(search_timer(heuristic_search, board, max_nodes=max_nodes))
             print(f"Ran in: {time.perf_counter() - st:.2f}")
@@ -298,7 +306,7 @@ if __name__ == "__main__":
             best_moves = min([best_moves, results[-1][1]], key=len)
 
             print("Running MCTS")
-            iterations = 20_000
+            iterations = 200_000
             st = time.perf_counter()
             results = list(
                 search_timer(monte_carlo_search, board, iterations=iterations, seed=42)
@@ -333,15 +341,11 @@ if __name__ == "__main__":
             plt.savefig(f"best_solution_found_board_no_{board_no}.png", dpi=200)
             plt.show()
 
-            import gc
-
-            gc.collect()
-
     # Beam search on NRK instances
     if False:
         plt.figure(figsize=(6, 3))
         plt.title("Beam search on NRK instances")
-        beam_powers = list(range(11))
+        beam_powers = list(range(16))
         beam_widths = [2**p for p in beam_powers]
 
         for board_no, instance in NRK_boards.items():
@@ -363,20 +367,27 @@ if __name__ == "__main__":
 
     # Plot the best solution sequence - using many iterations
     if False:
-        BOARD_NUMBER = 26
+        BOARD_NUMBER = 28
         board = Board(NRK_boards[BOARD_NUMBER].board.grid)
 
-        max_nodes = 1_250_000
-        *_, moves_h = heuristic_search(board, max_nodes=max_nodes, verbose=True)
+        *_, moves_bs = anytime_beam_search(board, power=15, verbose=True)
 
-        iterations = 100_000
-        *_, moves_mc = monte_carlo_search(
-            board, iterations=iterations, seed=42, verbosity=1
+        max_nodes = 300_000
+        *_, moves_h = heuristic_search(
+            board, max_nodes=max_nodes, verbose=True, shortest_path=len(moves_bs)
         )
 
-        *_, moves_bs = anytime_beam_search(board, power=15)
+        iterations = 500_000
+        *_, moves_mc = monte_carlo_search(
+            board,
+            iterations=iterations,
+            seed=42,
+            verbosity=1,
+            shortest_path=min(len(moves_bs), len(moves_h)),
+        )
 
         moves = min([moves_mc, moves_h, moves_bs], key=len)
+        print(f"Best solution: {moves}")
 
         fig, axes = plot_solution(board, moves)
         plt.savefig(
@@ -417,24 +428,3 @@ if __name__ == "__main__":
         plt.tight_layout()
         plt.savefig("randomized_best_first_search.png", dpi=200)
         plt.show()
-
-    # Test various levels of exploration
-    if False:
-        for exploration in [0.25, 0.5, 1, 2, 4]:
-            results = []
-            for seed in range(10):
-                board = Board.generate_random((9, 7), seed=seed)
-
-                iterations = 10_000
-                *_, moves = list(
-                    monte_carlo_search(
-                        board,
-                        iterations=iterations,
-                        seed=2,
-                        verbosity=0,
-                        exploration=exploration,
-                    )
-                )
-                results.append(len(moves))
-
-            print(exploration, statistics.mean(results))
