@@ -482,7 +482,7 @@ def anytime_beam_search(board, *, power=1, verbose=False):
             break
 
         if verbose:
-            print(f"Running beam search with beam_width={2**p}")
+            print(f"Beam search with beam_width=2**{p}={2**p}")
 
         moves = beam_search(board, beam_width=2**p)
 

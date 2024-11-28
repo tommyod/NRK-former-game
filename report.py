@@ -260,7 +260,7 @@ if __name__ == "__main__":
     # Investigate the branching factor of a board instance
     if False:
         board = NRK_boards[26].board
-        for max_depth in range(1, 6):
+        for max_depth in range(1, 5):
             print()
             depth_counts = dfs_counter(board, max_depth=max_depth)
 
@@ -278,16 +278,13 @@ if __name__ == "__main__":
     # Plot solution times on NRK boards
     if False:
         for board_no, instance in sorted(NRK_boards.items()):
-            if board_no != 23:
-                continue
-
             plt.figure(figsize=(6, 3))
             plt.title("Comparing search algorithms")
             board = Board(instance.board.grid)
             print(f"Board number: {board_no} (best known: {instance.best}) \n{board}")
 
             print("Running beam search")
-            power = 13
+            power = 15
             st = time.perf_counter()
             results = list(search_timer(anytime_beam_search, board, power=power))
             print(f"Ran in: {time.perf_counter() - st:.2f}")
@@ -297,7 +294,7 @@ if __name__ == "__main__":
             best_moves = results[-1][1]
 
             print("Running heuristic search")
-            max_nodes = 500_000
+            max_nodes = 4_000_000
             st = time.perf_counter()
             results = list(search_timer(heuristic_search, board, max_nodes=max_nodes))
             print(f"Ran in: {time.perf_counter() - st:.2f}")
@@ -309,7 +306,7 @@ if __name__ == "__main__":
             best_moves = min([best_moves, results[-1][1]], key=len)
 
             print("Running MCTS")
-            iterations = 20_000
+            iterations = 200_000
             st = time.perf_counter()
             results = list(
                 search_timer(monte_carlo_search, board, iterations=iterations, seed=42)
@@ -348,7 +345,7 @@ if __name__ == "__main__":
     if False:
         plt.figure(figsize=(6, 3))
         plt.title("Beam search on NRK instances")
-        beam_powers = list(range(11))
+        beam_powers = list(range(16))
         beam_widths = [2**p for p in beam_powers]
 
         for board_no, instance in NRK_boards.items():
@@ -370,20 +367,27 @@ if __name__ == "__main__":
 
     # Plot the best solution sequence - using many iterations
     if False:
-        BOARD_NUMBER = 26
+        BOARD_NUMBER = 28
         board = Board(NRK_boards[BOARD_NUMBER].board.grid)
 
-        max_nodes = 1_250_000
-        *_, moves_h = heuristic_search(board, max_nodes=max_nodes, verbose=True)
+        *_, moves_bs = anytime_beam_search(board, power=15, verbose=True)
 
-        iterations = 100_000
-        *_, moves_mc = monte_carlo_search(
-            board, iterations=iterations, seed=42, verbosity=1
+        max_nodes = 300_000
+        *_, moves_h = heuristic_search(
+            board, max_nodes=max_nodes, verbose=True, shortest_path=len(moves_bs)
         )
 
-        *_, moves_bs = anytime_beam_search(board, power=15)
+        iterations = 500_000
+        *_, moves_mc = monte_carlo_search(
+            board,
+            iterations=iterations,
+            seed=42,
+            verbosity=1,
+            shortest_path=min(len(moves_bs), len(moves_h)),
+        )
 
         moves = min([moves_mc, moves_h, moves_bs], key=len)
+        print(f"Best solution: {moves}")
 
         fig, axes = plot_solution(board, moves)
         plt.savefig(
@@ -424,24 +428,3 @@ if __name__ == "__main__":
         plt.tight_layout()
         plt.savefig("randomized_best_first_search.png", dpi=200)
         plt.show()
-
-    # Test various levels of exploration
-    if False:
-        for exploration in [0.25, 0.5, 1, 2, 4]:
-            results = []
-            for seed in range(10):
-                board = Board.generate_random((9, 7), seed=seed)
-
-                iterations = 10_000
-                *_, moves = list(
-                    monte_carlo_search(
-                        board,
-                        iterations=iterations,
-                        seed=2,
-                        verbosity=0,
-                        exploration=exploration,
-                    )
-                )
-                results.append(len(moves))
-
-            print(exploration, statistics.mean(results))
