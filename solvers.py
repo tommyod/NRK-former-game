@@ -442,15 +442,19 @@ class BeamNode:
 
     @functools.cached_property
     def evaluate(self):
+        return (self.cleared_per_move(), -estimate_remaining(self.board))
+
+    def cleared_per_move(self):
         if not self.moves:
             return 0
-
-        moves = len(self.moves)
-        cleared_per_move = self.cleared / moves
-        return (cleared_per_move, -estimate_remaining(self.board))
+        return self.cleared / len(self.moves)
 
     def __lt__(self, other):
-        return self.evaluate < other.evaluate
+        # Short circuit the comparison. Only compare both if first are equal
+        if self.cleared_per_move() == other.cleared_per_move():
+            return self.evaluate < other.evaluate
+        else:
+            return self.cleared_per_move() < other.cleared_per_move()
 
     def __eq__(self, other):
         return self.board == other.board
