@@ -130,6 +130,36 @@ import functools
 from board import Board
 
 
+def unique_everseen(iterable, key=None):
+    """
+    Yield unique elements, preserving order.
+
+    Examples
+    --------
+    >>> list(unique_everseen('AAAABBBCCDAABBB'))
+    ['A', 'B', 'C', 'D']
+    >>> list(unique_everseen('ABBCcAD', str.lower))
+    ['A', 'B', 'C', 'D']
+    """
+    # https://github.com/more-itertools/more-itertools/blob/abbcfbce24cb59e62e01daac4d80f9658202708a/more_itertools/recipes.py#L483
+    seenset = set()
+    seenset_add = seenset.add
+    seenlist = []
+    seenlist_add = seenlist.append
+    use_key = key is not None
+
+    for element in iterable:
+        k = key(element) if use_key else element
+        try:
+            if k not in seenset:
+                seenset_add(k)
+                yield element
+        except TypeError:
+            if k not in seenlist:
+                seenlist_add(k)
+                yield element
+
+
 def best_first_search(board: Board, *, power=None, seed=None):
     """Greedy search. Choose the move that clears the most cells.
 
@@ -408,6 +438,7 @@ class BeamNode:
 
     board: Board
     moves: tuple
+    cleared: int = 0
 
     @functools.cached_property
     def evaluate(self):
@@ -415,11 +446,17 @@ class BeamNode:
             return 0
 
         moves = len(self.moves)
-        cleared_per_move = self.board.cleared / moves
+        cleared_per_move = self.cleared / moves
         return (cleared_per_move, -estimate_remaining(self.board))
 
     def __lt__(self, other):
         return self.evaluate < other.evaluate
+
+    def __eq__(self, other):
+        return self.board == other.board
+
+    def __hash__(self):
+        return hash(self.board)
 
 
 def beam_search(board: Board, *, beam_width: int = 3) -> list:
@@ -448,10 +485,20 @@ def beam_search(board: Board, *, beam_width: int = 3) -> list:
 
         # Generate all children of current beam
         next_beam = (
-            BeamNode(next_board, node.moves + (move,))
+            BeamNode(
+                next_board,
+                moves=node.moves + (move,),
+                cleared=node.cleared + num_removed,
+            )
             for node in beam
-            for (move, next_board) in node.board.children()
+            for (move, next_board, num_removed) in node.board.children(
+                return_removed=True
+            )
         )
+
+        # Only keep unique boards. If two boards are unique we know the path
+        # length must be unique too, so we can discard the duplicates
+        next_beam = unique_everseen(next_beam)
 
         # Keep only the best beam_width nodes
         beam = nlargest(n=beam_width, iterable=next_beam)
