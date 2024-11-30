@@ -566,33 +566,53 @@ def anytime_beam_search(board, *, power=1, verbose=False):
 
 @dataclasses.dataclass(frozen=True)
 class HeuristicNode:
-    """Make board states comparable for search."""
+    """Make board states comparable for search.
+
+    The comparison operator < is needed for heapq. Here we switch signs in the
+    __lt__ implementation, so that every property is better if it is higher.
+
+
+    """
 
     board: Board
     moves: tuple
+    cleared: int = None
+    bias = 0.5  # Hyperparameter
 
-    # Here we have to used `cached_property` rather than `cache`, because
-    # 'cache' creates one large dictionary in memory that points to all
-    # instances of the heuristic nodes. If we use `cache` then the nodes
-    # are never cleared from memory
+    def __post_init__(self):
+        if self.cleared is None:
+            self.cleared = self.board.cleared
+
     @functools.cached_property
-    def heuristic(self):
-        # No moves have been made, special case
+    def cleared_per_move(self):
+        # Special case to avoid dividing by zero
         if not self.moves:
             return 0
 
         moves = len(self.moves)
+        return self.cleared / moves + self.bias * moves
 
-        # Clearing 10 nodes in 2 moves is better than 5 in 1 move
-        bias = 0.5  # Bias that can be used to search deep first
-        cleared_per_move = self.board.cleared / moves + bias * moves
-        total_estimate = moves + estimate_remaining(self.board)
+    @functools.cached_property
+    def num_moves(self):
+        return len(self.moves)
 
-        # Negate signs, because lower is better in heapq
-        return (-cleared_per_move, -moves, total_estimate)
+    @functools.cached_property
+    def heuristic(self):
+        return -(self.num_moves + estimate_remaining(self.board))
+
+    @functools.cached_property
+    def remaining_groups(self):
+        return -len(list(self.board.yield_clicks()))
 
     def __lt__(self, other):
-        return self.heuristic < other.heuristic
+        """Implements < comparison operator, needed for heapq."""
+        attrs = ["cleared_per_move", "num_moves", "heuristic"]
+        self_values = (getattr(self, attr) for attr in attrs)
+        other_values = (getattr(other, attr) for attr in attrs)
+
+        for self_v, other_v in zip(self_values, other_values):
+            if self_v != other_v:
+                return self_v > other_v  # Switch comparison
 
 
 def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=False):
@@ -621,7 +641,7 @@ def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=F
     shortest_path = min(len(greedy_solution), shortest_path)
 
     # Add the board to the heap
-    heap = [HeuristicNode(board.copy(), moves=())]
+    heap = [HeuristicNode(board.copy(), moves=(), cleared=board.cleared)]
     g_scores = {board: 0}  # Keep track of nodes seen and number of moves
 
     popped_counter = 0
@@ -659,13 +679,19 @@ def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=F
             shortest_path = len(current.moves)
 
         # Go through all children, created by applying a single move
-        for (i, j), next_board in current.board.children():
+        for (i, j), next_board, num_removed in current.board.children(
+            return_removed=True
+        ):
             g = current_g + 1  # One more move is needed to reach the child
 
             # If not seen before, or the path is lower than recorded
             if (next_board not in g_scores) or (g < g_scores[next_board]):
                 g_scores[next_board] = g
-                next_node = HeuristicNode(next_board, current.moves + ((i, j),))
+                next_node = HeuristicNode(
+                    next_board,
+                    moves=current.moves + ((i, j),),
+                    cleared=current.cleared + num_removed,
+                )
                 heappush(heap, next_node)
 
 
