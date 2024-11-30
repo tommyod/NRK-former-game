@@ -217,7 +217,39 @@ def plot_solution(board, moves):
     return fig, axes
 
 
+def benchmark(algorithm, *, simulations, **kwargs):
+    """Benchmark and algorithm on `simulations` random instances."""
+    LABEL_INVARIANT = False
+
+    print(f"Benchmarking: {algorithm.__name__}(board, {kwargs})\n ", end="")
+    times, solution_lengths = [], []
+    for seed in range(simulations):
+        print(".", end="")
+        board = Board.generate_random(shape=(9, 7), seed=seed)
+        if LABEL_INVARIANT:
+            board = LabelInvariantBoard(board.relabel().grid)
+        start_time = time.perf_counter()
+        *_, moves = algorithm(board, **kwargs)
+        times.append(time.perf_counter() - start_time)
+        board.verify_solution(moves)
+        solution_lengths.append(len(moves))
+
+    avg_time = statistics.mean(times)
+    avg_solution = statistics.mean(solution_lengths)
+    print(f"\n Solutions of avg. length {avg_solution:.3f} in {avg_time:.3f} sec.")
+    print(f" Avg. length times sec (lower is better) => {avg_solution*avg_time:.3f}\n")
+
+
 if __name__ == "__main__":
+    # Benchmark the solvers.
+    if False:
+        benchmark = functools.partial(benchmark, simulations=10)
+
+        # Parameters such that each solver takes ~18s to solve an instance
+        benchmark(anytime_beam_search, power=10)
+        benchmark(heuristic_search, max_nodes=220_000)
+        benchmark(monte_carlo_search, iterations=3100, seed=1)
+
     # Solve random boards to optimality and create a plot
     if False:
         plt.figure(figsize=(7, 3))
