@@ -446,6 +446,11 @@ class BeamNode:
         return -estimate_remaining(self.board)
 
     @functools.cached_property
+    def remaining_groups(self):
+        # Lower is better, so negate signs
+        return -len(list(self.board.yield_clicks()))
+
+    @functools.cached_property
     def cleared_per_move(self):
         # Higher is better
         if not self.moves:
@@ -454,7 +459,7 @@ class BeamNode:
 
     def __lt__(self, other):
         """Implements < comparison, needed for heapq."""
-        attrs = ["cleared_per_move", "remaining"]
+        attrs = ["cleared_per_move", "remaining", "remaining_groups"]
         self_values = (getattr(self, attr) for attr in attrs)
         other_values = (getattr(other, attr) for attr in attrs)
 
@@ -462,6 +467,8 @@ class BeamNode:
         for self_v, other_v in zip(self_values, other_values):
             if self_v != other_v:
                 return self_v < other_v
+
+        return False
 
     def __eq__(self, other):
         # Implemented to apply `unique_everseen` to nodes, to remove duplicates
@@ -606,13 +613,15 @@ class HeuristicNode:
 
     def __lt__(self, other):
         """Implements < comparison operator, needed for heapq."""
-        attrs = ["cleared_per_move", "num_moves", "heuristic"]
+        attrs = ["cleared_per_move", "num_moves", "heuristic", "remaining_groups"]
         self_values = (getattr(self, attr) for attr in attrs)
         other_values = (getattr(other, attr) for attr in attrs)
 
         for self_v, other_v in zip(self_values, other_values):
             if self_v != other_v:
                 return self_v > other_v  # Switch comparison
+
+        return False
 
 
 def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=False):
