@@ -126,6 +126,7 @@ import pytest
 import random
 import itertools
 import functools
+import operator
 
 from board import Board
 
@@ -441,25 +442,34 @@ class BeamNode:
     cleared: int = 0
 
     @functools.cached_property
-    def evaluate(self):
-        return (self.cleared_per_move(), -estimate_remaining(self.board))
+    def remaining(self):
+        # Lower is better, so negate signs
+        return -estimate_remaining(self.board)
 
+    @functools.cached_property
     def cleared_per_move(self):
+        # Higher is better
         if not self.moves:
             return 0
         return self.cleared / len(self.moves)
 
     def __lt__(self, other):
-        # Short circuit the comparison. Only compare both if first are equal
-        if self.cleared_per_move() == other.cleared_per_move():
-            return self.evaluate < other.evaluate
-        else:
-            return self.cleared_per_move() < other.cleared_per_move()
+        """Implements < comparison, needed for heapq."""
+        attrs = ["cleared_per_move", "remaining"]
+        self_values = (getattr(self, attr) for attr in attrs)
+        other_values = (getattr(other, attr) for attr in attrs)
+
+        # Short circuit the comparison
+        for self_v, other_v in zip(self_values, other_values):
+            if self_v != other_v:
+                return self_v < other_v
 
     def __eq__(self, other):
+        # Implemented to apply `unique_everseen` to nodes, to remove duplicates
         return self.board == other.board
 
     def __hash__(self):
+        # Implemented to apply `unique_everseen` to nodes, to remove duplicates
         return hash(self.board)
 
 
@@ -479,7 +489,7 @@ def beam_search(board: Board, *, beam_width: int = 3) -> list:
     >>> moves  # May not find optimal solution
     [(0, 0), (2, 1), (1, 0)]
     """
-    beam = [BeamNode(board.copy(), ())]
+    beam = [BeamNode(board.copy(), moves=(), cleared=0)]
 
     while beam:
         # Check if any are solved
