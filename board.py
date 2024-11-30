@@ -437,17 +437,15 @@ class Board:
         return type(self)(self.grid)  # The __init__ method takes a copy
 
     def __hash__(self):
-        # return hash(tuple(tuple(row) for row in self.grid))
-        return self._to_number()
+        return hash(tuple(tuple(row) for row in self.grid))  # 1.15 μs
+        return self._to_number()  # 5.59 μs
 
     def __eq__(self, other):
         if not isinstance(other, Board):
             return False
         if not (self.rows == other.rows and self.cols == other.cols):
             return False
-
-        coords = itertools.product(range(self.rows), range(self.cols))
-        return all(self.grid[i][j] == other.grid[i][j] for (i, j) in coords)
+        return self.grid == other.grid
 
     def verify_solution(self, moves):
         """Returns True if a sequence of moves solves the board."""
