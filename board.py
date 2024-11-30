@@ -242,7 +242,7 @@ class Board:
 
         boards = ((b, i) for (i, b) in enumerate([b0, b1, b2, b3]))
 
-        board, board_idx = min(boards, key=lambda t: hash(t[0]))
+        board, board_idx = min(boards, key=lambda t: t[0]._to_number())
 
         if was_flipped:
             return board, board_idx in (1, 2)  # Second are third are flipped
