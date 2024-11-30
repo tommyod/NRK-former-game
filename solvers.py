@@ -126,7 +126,6 @@ import pytest
 import random
 import itertools
 import functools
-import operator
 
 from board import Board
 
