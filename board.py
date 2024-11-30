@@ -267,13 +267,39 @@ class Board:
         >>> Board(grid).click(1, 0).unique_remaining
         4
         """
-        return len(set(self.grid[i][j] for (i, j) in self.yield_clicks()))
+        unique = set(c for row in self.grid for c in row)
+        unique.discard(0)
+        return len(unique)
 
     def yield_clicks(self):
-        """Yield all combinations of (i, j) that are non-zero in the board."""
+        """Yield all combinations of (i, j) that are non-zero in the board.
+
+        Examples
+        --------
+        >>> grid = [[1, 2, 3],
+        ...         [3, 2, 2],
+        ...         [4, 4, 4]]
+        >>> board = Board(grid)
+        >>> list(board.yield_clicks())
+        [(0, 0), (0, 1), (0, 2), (1, 0), (2, 0)]
+        """
+        seen = set()
         for i, j in itertools.product(range(self.rows), range(self.cols)):
-            if self.grid[i][j] > 0:
+            # Skip zero cells
+            if self.grid[i][j] == 0:
+                continue
+
+            if (i, j) not in seen:
                 yield (i, j)
+
+                seen.update(
+                    self._find_connected(
+                        i=i,
+                        j=j,
+                        value=self.grid[i][j],
+                        visited=set(),
+                    )
+                )
 
     def children(self, return_removed=False):
         """Yields (move, board) for all children boards.
@@ -307,23 +333,16 @@ class Board:
         123
         233
         """
-        seen = set()  # Do not yield the same board twice
-
         if self.is_solved:
             return
 
         for i, j in self.yield_clicks():
             board, num_removed = self.click(i, j, return_removed=True)
 
-            if board in seen:
-                continue
-
             if return_removed:
                 yield (i, j), board, num_removed
             else:
                 yield (i, j), board
-
-            seen.add(board)
 
     def click(self, i: int, j: int, return_removed=False) -> bool:
         """Handle a click at position (i,j).
@@ -391,7 +410,7 @@ class Board:
     def is_solved(self) -> bool:
         """Check if the board is cleared (all cells are zero)."""
         # Only need to check bottom row because of gravity
-        return all(cell == 0 for cell in self.grid[-1])
+        return self.grid[-1] == [0] * self.cols
 
     @functools.cached_property
     def remaining(self) -> int:
