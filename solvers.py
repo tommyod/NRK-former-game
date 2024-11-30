@@ -725,17 +725,43 @@ class MCTSNode:
     def __post_init__(self):
         self.children = []
 
+    @functools.cached_property
+    def remaining(self):
+        return estimate_remaining(self.board)
+
+    @functools.cached_property
+    def remaining_groups(self):
+        return len(list(self.board.yield_clicks()))
+
     def ucb_score(self, exploration=1.41):
         """Calculate UCB score for node selection."""
         if not self.visits:
             # If not visisted, return UCB of +inf and tie-break with h(n)
-            return (float("inf"), -estimate_remaining(self.board))
-        exploit = self.score / self.visits
+            return float("inf")
 
+        exploit = self.score / self.visits
         explore = exploration * math.sqrt(math.log(self.parent.visits) / self.visits)
 
         # Return UCB score, and use the admissible heuristic as tie-breaker
-        return (exploit + explore, -estimate_remaining(self.board))
+        return exploit + explore
+
+    def __lt__(self, other):
+        """Implementing < (__lt__) is needed for max() to work."""
+
+        # UCB score is the main comparison metric
+        if self.ucb_score() != other.ucb_score():
+            return self.ucb_score() < other.ucb_score()
+
+        # If UCB score is the same
+        attrs = ["remaining", "remaining_groups"]
+        self_values = (getattr(self, attr) for attr in attrs)
+        other_values = (getattr(other, attr) for attr in attrs)
+
+        for self_v, other_v in zip(self_values, other_values):
+            if self_v != other_v:
+                return self_v > other_v  # Switch comparison, lower is better
+
+        return False
 
     def expand(self) -> List["MCTSNode"]:
         """Create child nodes for all possible moves."""
@@ -866,7 +892,7 @@ def monte_carlo_search(
 
             # Any unvisited node will get UCB score +inf and be chosen
             # TODO: The parameter `exploration` for UCB could be tuned
-            node = max(children, key=lambda n: n.ucb_score(exploration=1.41))
+            node = max(children)
             path.append(node)
 
         # Simulate from leaf node of explored tree down to the end of the game
