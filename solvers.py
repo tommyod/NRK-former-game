@@ -305,7 +305,7 @@ def iterative_deepening_search(board: Board) -> list:
 # =============================================================================
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, eq=False, order=False)
 class AStarNode:
     """Make board states comparable for search."""
 
@@ -318,6 +318,7 @@ class AStarNode:
     def h(self):
         return estimate_remaining(self.board)
 
+    @functools.cached_property
     def f(self):
         num_moves = len(self.moves)
         # Return (admissible_heuristic(), non_admissible(), non_admissible())
@@ -327,7 +328,7 @@ class AStarNode:
         return (self.g() + self.h(), -cleared_per_move, -num_moves)
 
     def __lt__(self, other):
-        return self.f() < other.f()
+        return self.f < other.f
 
 
 def a_star_search(board: Board) -> list:
@@ -346,7 +347,7 @@ def a_star_search(board: Board) -> list:
     """
 
     # f(n) = num_moves + heuristic(n), board, moves in a SearchNode class
-    heap = [AStarNode(board.copy(), ())]
+    heap = [AStarNode(board.copy(), moves=())]
     g_scores = {board.copy(): 0}  # Keep track of nodes seen and number of moves
 
     while heap:
@@ -370,7 +371,7 @@ def a_star_search(board: Board) -> list:
             # If not seen before, or the path is lower than recorded
             if (next_board not in g_scores) or (g < g_scores[next_board]):
                 g_scores[next_board] = g
-                next_node = AStarNode(next_board, current.moves + ((i, j),))
+                next_node = AStarNode(next_board, moves=current.moves + ((i, j),))
                 heappush(heap, next_node)
 
 
@@ -432,7 +433,7 @@ def estimate_remaining(board: Board) -> int:
 # =============================================================================
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, eq=False, order=False)
 class BeamNode:
     """Node for beam search with evaluation function."""
 
@@ -441,25 +442,41 @@ class BeamNode:
     cleared: int = 0
 
     @functools.cached_property
-    def evaluate(self):
-        return (self.cleared_per_move(), -estimate_remaining(self.board))
+    def remaining(self):
+        # Lower is better, so negate signs
+        return -estimate_remaining(self.board)
 
+    @functools.cached_property
+    def remaining_groups(self):
+        # Lower is better, so negate signs
+        return -len(list(self.board.yield_clicks()))
+
+    @functools.cached_property
     def cleared_per_move(self):
+        # Higher is better
         if not self.moves:
             return 0
         return self.cleared / len(self.moves)
 
     def __lt__(self, other):
-        # Short circuit the comparison. Only compare both if first are equal
-        if self.cleared_per_move() == other.cleared_per_move():
-            return self.evaluate < other.evaluate
-        else:
-            return self.cleared_per_move() < other.cleared_per_move()
+        """Implements < comparison, needed for heapq."""
+        attrs = ["cleared_per_move", "remaining", "remaining_groups"]
+        self_values = (getattr(self, attr) for attr in attrs)
+        other_values = (getattr(other, attr) for attr in attrs)
+
+        # Short circuit the comparison
+        for self_v, other_v in zip(self_values, other_values):
+            if self_v != other_v:
+                return self_v < other_v
+
+        return False
 
     def __eq__(self, other):
+        # Implemented to apply `unique_everseen` to nodes, to remove duplicates
         return self.board == other.board
 
     def __hash__(self):
+        # Implemented to apply `unique_everseen` to nodes, to remove duplicates
         return hash(self.board)
 
 
@@ -479,7 +496,7 @@ def beam_search(board: Board, *, beam_width: int = 3) -> list:
     >>> moves  # May not find optimal solution
     [(0, 0), (2, 1), (1, 0)]
     """
-    beam = [BeamNode(board.copy(), ())]
+    beam = [BeamNode(board.copy(), moves=(), cleared=0)]
 
     while beam:
         # Check if any are solved
@@ -508,28 +525,44 @@ def beam_search(board: Board, *, beam_width: int = 3) -> list:
         beam = nlargest(n=beam_width, iterable=next_beam)
 
 
-def anytime_beam_search(board, *, power=1, verbose=False):
+def anytime_beam_search(board, *, power: int = 1, verbose: bool = False):
     """Run beam search with width=1,2,4,8,...,2**power, yielding solutions.
-    If power is None, then power will be increased until no improvement occurs.
+    If power is None, then power will be increased until no improvement occurs
+    for 3 iterations.
 
     Examples
     --------
     >>> board = Board([[0, 0, 0, 3],
     ...                [3, 3, 3, 2],
     ...                [3, 2, 2, 1]])
-    >>> for moves in anytime_beam_search(board, power=5):
+    >>> for moves in anytime_beam_search(board, power=None):
     ...     assert board.verify_solution(moves)
     ...     print(f'Solution of length {len(moves)}: {moves}')
     Solution of length 5: [(1, 0), (2, 1), (0, 3), (1, 3), (2, 3)]
+    Solution of length 4: [(1, 0), (2, 3), (2, 1), (2, 3)]
     Solution of length 3: [(2, 3), (1, 0), (2, 1)]
+    >>> board = Board([[1, 2, 2, 1, 3, 3],
+    ...                [4, 1, 2, 1, 1, 1],
+    ...                [3, 2, 1, 1, 3, 1],
+    ...                [3, 1, 3, 3, 4, 4]])
+    >>> for moves in anytime_beam_search(board, power=6):
+    ...     assert board.verify_solution(moves)
+    ...     print(f'Solution of length {len(moves)}')
+    Solution of length 9
+    Solution of length 8
+    Solution of length 7
     """
     power_is_None = power is None
     shortest_path = float("inf")
     no_improvement_count = 0
 
     for p in itertools.count(0):
-        # Break conditions
+        # Break conditions on power
         if not power_is_None and p > power:
+            break
+
+        # If we cannot possibly do better, stop searching
+        if estimate_remaining(board) >= shortest_path:
             break
 
         if verbose:
@@ -555,35 +588,55 @@ def anytime_beam_search(board, *, power=1, verbose=False):
 # =============================================================================
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, eq=False, order=False)
 class HeuristicNode:
-    """Make board states comparable for search."""
+    """Make board states comparable for search.
+
+    The comparison operator < is needed for heapq. Here we switch signs in the
+    __lt__ implementation, so that every property is better if it is higher.
+    """
 
     board: Board
     moves: tuple
+    cleared: int = None
+    bias = 0.5  # Hyperparameter
 
-    # Here we have to used `cached_property` rather than `cache`, because
-    # 'cache' creates one large dictionary in memory that points to all
-    # instances of the heuristic nodes. If we use `cache` then the nodes
-    # are never cleared from memory
+    def __post_init__(self):
+        if self.cleared is None:
+            self.cleared = self.board.cleared
+
     @functools.cached_property
-    def heuristic(self):
-        # No moves have been made, special case
+    def cleared_per_move(self):
+        # Special case to avoid dividing by zero
         if not self.moves:
             return 0
 
         moves = len(self.moves)
+        return self.cleared / moves + self.bias * moves
 
-        # Clearing 10 nodes in 2 moves is better than 5 in 1 move
-        bias = 0.5  # Bias that can be used to search deep first
-        cleared_per_move = self.board.cleared / moves + bias * moves
-        total_estimate = moves + estimate_remaining(self.board)
+    @functools.cached_property
+    def num_moves(self):
+        return len(self.moves)
 
-        # Negate signs, because lower is better in heapq
-        return (-cleared_per_move, -moves, total_estimate)
+    @functools.cached_property
+    def heuristic(self):
+        return -(self.num_moves + estimate_remaining(self.board))
+
+    @functools.cached_property
+    def remaining_groups(self):
+        return -len(list(self.board.yield_clicks()))
 
     def __lt__(self, other):
-        return self.heuristic < other.heuristic
+        """Implements < comparison operator, needed for heapq."""
+        attrs = ["cleared_per_move", "num_moves", "heuristic", "remaining_groups"]
+        self_values = (getattr(self, attr) for attr in attrs)
+        other_values = (getattr(other, attr) for attr in attrs)
+
+        for self_v, other_v in zip(self_values, other_values):
+            if self_v != other_v:
+                return self_v > other_v  # Switch comparison => larger is better
+
+        return False
 
 
 def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=False):
@@ -612,7 +665,7 @@ def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=F
     shortest_path = min(len(greedy_solution), shortest_path)
 
     # Add the board to the heap
-    heap = [HeuristicNode(board.copy(), moves=())]
+    heap = [HeuristicNode(board.copy(), moves=(), cleared=board.cleared)]
     g_scores = {board: 0}  # Keep track of nodes seen and number of moves
 
     popped_counter = 0
@@ -650,13 +703,19 @@ def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=F
             shortest_path = len(current.moves)
 
         # Go through all children, created by applying a single move
-        for (i, j), next_board in current.board.children():
+        for (i, j), next_board, num_removed in current.board.children(
+            return_removed=True
+        ):
             g = current_g + 1  # One more move is needed to reach the child
 
             # If not seen before, or the path is lower than recorded
             if (next_board not in g_scores) or (g < g_scores[next_board]):
                 g_scores[next_board] = g
-                next_node = HeuristicNode(next_board, current.moves + ((i, j),))
+                next_node = HeuristicNode(
+                    next_board,
+                    moves=current.moves + ((i, j),),
+                    cleared=current.cleared + num_removed,
+                )
                 heappush(heap, next_node)
 
 
@@ -681,17 +740,44 @@ class MCTSNode:
     def __post_init__(self):
         self.children = []
 
+    @functools.cached_property
+    def remaining(self):
+        return estimate_remaining(self.board)
+
+    @functools.cached_property
+    def remaining_groups(self):
+        return len(list(self.board.yield_clicks()))
+
     def ucb_score(self, exploration=1.41):
         """Calculate UCB score for node selection."""
         if not self.visits:
             # If not visisted, return UCB of +inf and tie-break with h(n)
-            return (float("inf"), -estimate_remaining(self.board))
-        exploit = self.score / self.visits
+            return float("inf")
 
+        exploit = self.score / self.visits
         explore = exploration * math.sqrt(math.log(self.parent.visits) / self.visits)
 
         # Return UCB score, and use the admissible heuristic as tie-breaker
-        return (exploit + explore, -estimate_remaining(self.board))
+        return exploit + explore
+
+    def __lt__(self, other):
+        """Implementing < (__lt__) is needed for max() to work."""
+
+        # UCB score is the main comparison metric
+        if self.ucb_score() != other.ucb_score():
+            return self.ucb_score() < other.ucb_score()
+
+        # If UCB score is the same
+        attrs = ["remaining", "remaining_groups"]
+        self_values = (getattr(self, attr) for attr in attrs)
+        other_values = (getattr(other, attr) for attr in attrs)
+
+        for self_v, other_v in zip(self_values, other_values):
+            if self_v != other_v:
+                # Switch comparison from < to > means that lower is better
+                return self_v > other_v
+
+        return False
 
     def expand(self) -> List["MCTSNode"]:
         """Create child nodes for all possible moves."""
@@ -822,7 +908,7 @@ def monte_carlo_search(
 
             # Any unvisited node will get UCB score +inf and be chosen
             # TODO: The parameter `exploration` for UCB could be tuned
-            node = max(children, key=lambda n: n.ucb_score(exploration=1.41))
+            node = max(children)
             path.append(node)
 
         # Simulate from leaf node of explored tree down to the end of the game
