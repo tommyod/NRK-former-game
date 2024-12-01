@@ -305,7 +305,7 @@ def iterative_deepening_search(board: Board) -> list:
 # =============================================================================
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, eq=False, order=False)
 class AStarNode:
     """Make board states comparable for search."""
 
@@ -432,7 +432,7 @@ def estimate_remaining(board: Board) -> int:
 # =============================================================================
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, eq=False, order=False)
 class BeamNode:
     """Node for beam search with evaluation function."""
 
@@ -587,7 +587,7 @@ def anytime_beam_search(board, *, power: int = 1, verbose: bool = False):
 # =============================================================================
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, eq=False, order=False)
 class HeuristicNode:
     """Make board states comparable for search.
 
