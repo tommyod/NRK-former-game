@@ -245,10 +245,10 @@ if __name__ == "__main__":
     if False:
         benchmark = functools.partial(benchmark, simulations=10)
 
-        # Parameters such that each solver takes ~18s to solve an instance
+        # Parameters such that each solver takes ~15s to solve an instance
         benchmark(anytime_beam_search, power=10)
-        benchmark(heuristic_search, max_nodes=220_000)
-        benchmark(monte_carlo_search, iterations=3100, seed=1)
+        benchmark(heuristic_search, max_nodes=150_000)
+        benchmark(monte_carlo_search, iterations=3320, seed=1)
 
     # Solve random boards to optimality and create a plot
     if False:
