@@ -533,10 +533,11 @@ def anytime_beam_search(board, *, power=1, verbose=False):
     >>> board = Board([[0, 0, 0, 3],
     ...                [3, 3, 3, 2],
     ...                [3, 2, 2, 1]])
-    >>> for moves in anytime_beam_search(board, power=5):
+    >>> for moves in anytime_beam_search(board, power=3, verbose=True):
     ...     assert board.verify_solution(moves)
     ...     print(f'Solution of length {len(moves)}: {moves}')
     Solution of length 5: [(1, 0), (2, 1), (0, 3), (1, 3), (2, 3)]
+    Solution of length 4: [(1, 0), (2, 3), (2, 1), (2, 3)]
     Solution of length 3: [(2, 3), (1, 0), (2, 1)]
     """
     power_is_None = power is None
@@ -544,8 +545,12 @@ def anytime_beam_search(board, *, power=1, verbose=False):
     no_improvement_count = 0
 
     for p in itertools.count(0):
-        # Break conditions
+        # Break conditions on power
         if not power_is_None and p > power:
+            break
+
+        # If we cannot possibly do better, stop searching
+        if estimate_remaining(board) >= shortest_path:
             break
 
         if verbose:
