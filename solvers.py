@@ -318,6 +318,7 @@ class AStarNode:
     def h(self):
         return estimate_remaining(self.board)
 
+    @functools.cached_property
     def f(self):
         num_moves = len(self.moves)
         # Return (admissible_heuristic(), non_admissible(), non_admissible())
@@ -327,7 +328,7 @@ class AStarNode:
         return (self.g() + self.h(), -cleared_per_move, -num_moves)
 
     def __lt__(self, other):
-        return self.f() < other.f()
+        return self.f < other.f
 
 
 def a_star_search(board: Board) -> list:
@@ -346,7 +347,7 @@ def a_star_search(board: Board) -> list:
     """
 
     # f(n) = num_moves + heuristic(n), board, moves in a SearchNode class
-    heap = [AStarNode(board.copy(), ())]
+    heap = [AStarNode(board.copy(), moves=())]
     g_scores = {board.copy(): 0}  # Keep track of nodes seen and number of moves
 
     while heap:
@@ -370,7 +371,7 @@ def a_star_search(board: Board) -> list:
             # If not seen before, or the path is lower than recorded
             if (next_board not in g_scores) or (g < g_scores[next_board]):
                 g_scores[next_board] = g
-                next_node = AStarNode(next_board, current.moves + ((i, j),))
+                next_node = AStarNode(next_board, moves=current.moves + ((i, j),))
                 heappush(heap, next_node)
 
 
@@ -593,8 +594,6 @@ class HeuristicNode:
 
     The comparison operator < is needed for heapq. Here we switch signs in the
     __lt__ implementation, so that every property is better if it is higher.
-
-
     """
 
     board: Board
@@ -635,7 +634,7 @@ class HeuristicNode:
 
         for self_v, other_v in zip(self_values, other_values):
             if self_v != other_v:
-                return self_v > other_v  # Switch comparison
+                return self_v > other_v  # Switch comparison => larger is better
 
         return False
 
@@ -775,7 +774,8 @@ class MCTSNode:
 
         for self_v, other_v in zip(self_values, other_values):
             if self_v != other_v:
-                return self_v > other_v  # Switch comparison, lower is better
+                # Switch comparison from < to > means that lower is better
+                return self_v > other_v
 
         return False
 
