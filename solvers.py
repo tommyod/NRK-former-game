@@ -524,21 +524,32 @@ def beam_search(board: Board, *, beam_width: int = 3) -> list:
         beam = nlargest(n=beam_width, iterable=next_beam)
 
 
-def anytime_beam_search(board, *, power=1, verbose=False):
+def anytime_beam_search(board, *, power: int = 1, verbose: bool = False):
     """Run beam search with width=1,2,4,8,...,2**power, yielding solutions.
-    If power is None, then power will be increased until no improvement occurs.
+    If power is None, then power will be increased until no improvement occurs
+    for 3 iterations.
 
     Examples
     --------
     >>> board = Board([[0, 0, 0, 3],
     ...                [3, 3, 3, 2],
     ...                [3, 2, 2, 1]])
-    >>> for moves in anytime_beam_search(board, power=3):
+    >>> for moves in anytime_beam_search(board, power=None):
     ...     assert board.verify_solution(moves)
     ...     print(f'Solution of length {len(moves)}: {moves}')
     Solution of length 5: [(1, 0), (2, 1), (0, 3), (1, 3), (2, 3)]
     Solution of length 4: [(1, 0), (2, 3), (2, 1), (2, 3)]
     Solution of length 3: [(2, 3), (1, 0), (2, 1)]
+    >>> board = Board([[1, 2, 2, 1, 3, 3],
+    ...                [4, 1, 2, 1, 1, 1],
+    ...                [3, 2, 1, 1, 3, 1],
+    ...                [3, 1, 3, 3, 4, 4]])
+    >>> for moves in anytime_beam_search(board, power=6):
+    ...     assert board.verify_solution(moves)
+    ...     print(f'Solution of length {len(moves)}')
+    Solution of length 9
+    Solution of length 8
+    Solution of length 7
     """
     power_is_None = power is None
     shortest_path = float("inf")
