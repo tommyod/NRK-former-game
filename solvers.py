@@ -533,7 +533,7 @@ def anytime_beam_search(board, *, power=1, verbose=False):
     >>> board = Board([[0, 0, 0, 3],
     ...                [3, 3, 3, 2],
     ...                [3, 2, 2, 1]])
-    >>> for moves in anytime_beam_search(board, power=3, verbose=True):
+    >>> for moves in anytime_beam_search(board, power=3):
     ...     assert board.verify_solution(moves)
     ...     print(f'Solution of length {len(moves)}: {moves}')
     Solution of length 5: [(1, 0), (2, 1), (0, 3), (1, 3), (2, 3)]
