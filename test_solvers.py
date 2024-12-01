@@ -4,6 +4,7 @@ Tests for solvers.
 
 import pytest
 import random
+import statistics
 
 
 from board import Board, LabelInvariantBoard
@@ -37,8 +38,8 @@ class TestSolvers:
         assert board.verify_solution(moves_bfs)
         assert board.verify_solution(moves_ids)
 
-        # Verify that A* is as good as BFS, which is more naive
-        assert len(moves_bfs) == len(moves_ids)
+        # Verify that IDS is as good as BFS, which is more naive
+        assert len(moves_ids) == len(moves_bfs)
 
     @pytest.mark.parametrize("seed", range(25))
     @pytest.mark.parametrize("relabel", [True, False])
@@ -117,6 +118,38 @@ class TestSolvers:
                 break
         else:
             assert False
+
+
+class TestNonRegressionOnPerformance:
+    def test_performance_anytime_beam_search(self):
+        solution_lengths = []
+        for seed in range(10):
+            board = Board.generate_random(shape=(9, 7), seed=seed)
+            *_, moves = anytime_beam_search(board, power=5)
+            assert board.verify_solution(moves)
+            solution_lengths.append(len(moves))
+
+        assert statistics.mean(solution_lengths) <= 16.8
+
+    def test_performance_heuristic_search(self):
+        solution_lengths = []
+        for seed in range(10):
+            board = Board.generate_random(shape=(9, 7), seed=seed)
+            *_, moves = heuristic_search(board, max_nodes=5000)
+            assert board.verify_solution(moves)
+            solution_lengths.append(len(moves))
+
+        assert statistics.mean(solution_lengths) <= 18.6
+
+    def test_performance_verify_solution(self):
+        solution_lengths = []
+        for seed in range(10):
+            board = Board.generate_random(shape=(9, 7), seed=seed)
+            *_, moves = monte_carlo_search(board, iterations=100, seed=seed)
+            assert board.verify_solution(moves)
+            solution_lengths.append(len(moves))
+
+        assert statistics.mean(solution_lengths) <= 18.4
 
 
 if __name__ == "__main__":

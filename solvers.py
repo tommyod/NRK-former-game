@@ -480,7 +480,7 @@ class BeamNode:
         return hash(self.board)
 
 
-def beam_search(board: Board, *, beam_width: int = 3) -> list:
+def beam_search(board: Board, *, beam_width: int = 3, shortest_path=None) -> list:
     """Beam search with specified beam width.
 
     Maintains only the top beam_width nodes at each depth level.
@@ -520,6 +520,14 @@ def beam_search(board: Board, *, beam_width: int = 3) -> list:
         # Only keep unique boards. If two boards are unique we know the path
         # length must be unique too, so we can discard the duplicates
         next_beam = unique_everseen(next_beam)
+
+        # Only keep boards where we can do better
+        if shortest_path:
+            next_beam = (
+                node
+                for node in next_beam
+                if len(node.moves) + estimate_remaining(node.board) < shortest_path
+            )
 
         # Keep only the best beam_width nodes
         beam = nlargest(n=beam_width, iterable=next_beam)
@@ -568,7 +576,7 @@ def anytime_beam_search(board, *, power: int = 1, verbose: bool = False):
         if verbose:
             print(f"Beam search with beam_width=2**{p}={2**p}")
 
-        moves = beam_search(board, beam_width=2**p)
+        moves = beam_search(board, beam_width=2**p, shortest_path=shortest_path)
 
         # Only yield if we found a better solution
         if moves and len(moves) < shortest_path:

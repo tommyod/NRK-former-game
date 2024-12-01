@@ -151,9 +151,8 @@ You can also run it for `beam_width=1, 2, 4, 8, ..., 2^power`:
 >>> for moves in anytime_beam_search(board, power=5):
 ...    print(f"Found solution of length {len(moves)}: {moves}")
 Found solution of length 7: [(0, 0), (2, 1), (1, 0), (1, 2), (2, 0), (2, 1), (2, 2)]
-Found solution of length 6: [(0, 0), (2, 0), (2, 0), (2, 1), (2, 2), (2, 2)]
-Found solution of length 5: [(2, 0), (2, 0), (2, 1), (2, 0), (2, 2)]
+Found solution of length 6: [(0, 0), (1, 2), (1, 2), (2, 0), (2, 1), (2, 0)]
+Found solution of length 5: [(0, 0), (2, 0), (1, 2), (1, 2), (2, 1)]
 Found solution of length 4: [(2, 0), (1, 1), (1, 0), (1, 2)]
-
 
 ```
