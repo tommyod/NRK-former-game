@@ -721,6 +721,7 @@ def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=F
             # Filter the scores
             boards = set(n.board for n in heap)
             g_scores = {b: v for (b, v) in g_scores.items() if b in boards}
+            del boards
 
         # Go through all children, created by applying a single move
         for (i, j), next_board, num_removed in current.board.children(
