@@ -28,8 +28,8 @@ def yield_board_shapes():
     """Yield board shapes of increasing size."""
     for size in itertools.count(2):
         yield (size, size)
-        yield (size, size + 1)
         yield (size + 1, size)
+        yield (size, size + 1)
 
 
 def time_solver(
@@ -311,12 +311,12 @@ if __name__ == "__main__":
     if False:
         for board_no, instance in sorted(NRK_boards.items()):
             plt.figure(figsize=(6, 3))
-            plt.title("Comparing search algorithms")
+            plt.title(f"Comparing search algorithms (NRK board {board_no})")
             board = Board(instance.board.grid)
             print(f"Board number: {board_no} (best known: {instance.best}) \n{board}")
 
             print("Running beam search")
-            power = 15
+            power = 16
             st = time.perf_counter()
             results = list(search_timer(anytime_beam_search, board, power=power))
             print(f"Ran in: {time.perf_counter() - st:.2f}")
@@ -326,7 +326,7 @@ if __name__ == "__main__":
             best_moves = results[-1][1]
 
             print("Running heuristic search")
-            max_nodes = 4_000_000
+            max_nodes = 6_000_000
             st = time.perf_counter()
             results = list(search_timer(heuristic_search, board, max_nodes=max_nodes))
             print(f"Ran in: {time.perf_counter() - st:.2f}")
@@ -338,7 +338,7 @@ if __name__ == "__main__":
             best_moves = min([best_moves, results[-1][1]], key=len)
 
             print("Running MCTS")
-            iterations = 200_000
+            iterations = 300_000
             st = time.perf_counter()
             results = list(
                 search_timer(monte_carlo_search, board, iterations=iterations, seed=42)
@@ -377,19 +377,32 @@ if __name__ == "__main__":
     if False:
         plt.figure(figsize=(6, 3))
         plt.title("Beam search on NRK instances")
-        beam_powers = list(range(16))
-        beam_widths = [2**p for p in beam_powers]
+        MAX_POWER = 18
 
-        for board_no, instance in NRK_boards.items():
+        for board_no, instance in sorted(NRK_boards.items()):
+            print(f"Beam search on board number {board_no}")
+
             board = Board(instance.board.grid)
-            print(f"Board number: {board_no}")
-            results = [
-                len(beam_search(board, beam_width=beam_width))
-                for beam_width in beam_widths
-            ]
-            plt.plot(beam_powers, results, "-o", alpha=0.8)
 
-        plt.xticks(beam_powers, [r"$2^{" + str(i) + r"}$" for i in beam_powers])
+            shortest_path = float("inf")
+            powers, solutions = [], []
+            for power in range(MAX_POWER + 1):
+                print(f"p={power}  ", end="")
+                solution = beam_search(
+                    board, beam_width=2**power, shortest_path=shortest_path
+                )
+                if solution and len(solution) < shortest_path:
+                    shortest_path = len(solution)
+                    powers.append(power)
+                    solutions.append(len(solution))
+
+            print()
+            plt.plot(powers, solutions, "-o", alpha=0.8, markersize=4)
+
+        plt.xticks(
+            list(range(MAX_POWER + 1)),
+            [r"$2^{" + str(i) + r"}$" for i in range(MAX_POWER + 1)],
+        )
         plt.xlabel("Beam width")
         plt.ylabel("Number of moves in solution")
         plt.grid(True, ls="--", zorder=0, alpha=0.33)

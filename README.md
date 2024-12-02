@@ -4,6 +4,8 @@ Code that attempts to solve NRK's game "[Former](https://www.nrk.no/former-1.171
 
 ![GamePlay](./gameplay.gif)
 
+- This repo has an accompanying blog post: **[Solving NRK’s game "Former"](https://tommyodland.com/articles/2024/solving-nrks-game-former/)**
+- PRs are welcome! Make an issue before you make significant changes in a PR.
 
 ## The Board class
 
@@ -110,8 +112,8 @@ You might run out of memory before that happens though.
 ...    print(f"Found solution of length {len(moves)}: {moves}")
 Found solution of length 8: [(2, 1), (2, 2), (2, 2), (2, 1), (2, 1), (2, 0), (2, 0), (2, 0)]
 Found solution of length 7: [(0, 0), (2, 1), (1, 0), (1, 2), (2, 0), (2, 1), (2, 2)]
-Found solution of length 6: [(0, 0), (1, 2), (1, 2), (1, 0), (2, 0), (2, 1)]
-Found solution of length 5: [(0, 0), (1, 2), (2, 0), (1, 2), (2, 1)]
+Found solution of length 6: [(0, 0), (2, 0), (2, 0), (1, 2), (2, 1), (2, 2)]
+Found solution of length 5: [(0, 0), (2, 0), (1, 2), (1, 2), (2, 1)]
 Found solution of length 4: [(1, 1), (2, 0), (1, 0), (1, 2)]
 
 ```

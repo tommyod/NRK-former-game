@@ -120,7 +120,7 @@ True
 import math
 from typing import Optional, List, Set
 import dataclasses
-from heapq import heappush, heappop, nlargest
+from heapq import heappush, heappop, nlargest, heapify
 from collections import deque
 import pytest
 import random
@@ -691,7 +691,7 @@ def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=F
             print(
                 f"Nodes popped:{popped_counter}  Progress:{popped_counter/max_nodes:.1%}  Shortest path:{shortest_path}"
             )
-            print(f" Heuristic function value:{current.heuristic}")
+            print(f" Heuristic function value:{current.cleared_per_move:.2f}")
             print(
                 f" Depth:{len(current.moves)}  In queue:{len(heap)}  Seen:{len(g_scores)}"
             )
@@ -709,6 +709,19 @@ def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=F
         if current.board.is_solved and len(current.moves) < shortest_path:
             yield list(current.moves)
             shortest_path = len(current.moves)
+
+            # Filter the heap, removing every node that cannot be better
+            heap = [
+                n
+                for n in heap
+                if len(n.moves) + estimate_remaining(n.board) < shortest_path
+            ]
+            heapify(heap)
+
+            # Filter the scores
+            boards = set(n.board for n in heap)
+            g_scores = {b: v for (b, v) in g_scores.items() if b in boards}
+            del boards
 
         # Go through all children, created by applying a single move
         for (i, j), next_board, num_removed in current.board.children(
