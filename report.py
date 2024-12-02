@@ -28,8 +28,8 @@ def yield_board_shapes():
     """Yield board shapes of increasing size."""
     for size in itertools.count(2):
         yield (size, size)
-        yield (size, size + 1)
         yield (size + 1, size)
+        yield (size, size + 1)
 
 
 def time_solver(
@@ -311,12 +311,12 @@ if __name__ == "__main__":
     if False:
         for board_no, instance in sorted(NRK_boards.items()):
             plt.figure(figsize=(6, 3))
-            plt.title("Comparing search algorithms")
+            plt.title(f"Comparing search algorithms (NRK board {board_no})")
             board = Board(instance.board.grid)
             print(f"Board number: {board_no} (best known: {instance.best}) \n{board}")
 
             print("Running beam search")
-            power = 15
+            power = 16
             st = time.perf_counter()
             results = list(search_timer(anytime_beam_search, board, power=power))
             print(f"Ran in: {time.perf_counter() - st:.2f}")
@@ -326,7 +326,7 @@ if __name__ == "__main__":
             best_moves = results[-1][1]
 
             print("Running heuristic search")
-            max_nodes = 4_000_000
+            max_nodes = 6_000_000
             st = time.perf_counter()
             results = list(search_timer(heuristic_search, board, max_nodes=max_nodes))
             print(f"Ran in: {time.perf_counter() - st:.2f}")
@@ -338,7 +338,7 @@ if __name__ == "__main__":
             best_moves = min([best_moves, results[-1][1]], key=len)
 
             print("Running MCTS")
-            iterations = 200_000
+            iterations = 300_000
             st = time.perf_counter()
             results = list(
                 search_timer(monte_carlo_search, board, iterations=iterations, seed=42)
