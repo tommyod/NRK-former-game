@@ -636,15 +636,10 @@ class HeuristicNode:
 
     def __lt__(self, other):
         """Implements < comparison operator, needed for heapq."""
-        attrs = ["cleared_per_move", "num_moves", "heuristic", "remaining_groups"]
-        self_values = (getattr(self, attr) for attr in attrs)
-        other_values = (getattr(other, attr) for attr in attrs)
-
-        for self_v, other_v in zip(self_values, other_values):
-            if self_v != other_v:
-                return self_v > other_v  # Switch comparison => larger is better
-
-        return False
+        scale = 3
+        selfnum = self.heuristic * scale + self.remaining_groups
+        othernum = other.heuristic * scale + other.remaining_groups
+        return selfnum > othernum
 
 
 def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=False):
