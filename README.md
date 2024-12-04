@@ -75,13 +75,15 @@ There are no guarantees that this results in an optimal solution.
 
 ```pycon
 >>> from solvers import best_first_search
->>> board = Board(grid=[[1, 1, 2], [2, 3, 1], [4, 2, 2]])
->>> moves = list(best_first_search(board))
+>>> board = Board([[4, 3, 3, 1, 1], 
+...                [1, 4, 4, 3, 2], 
+...                [3, 2, 4, 4, 3], 
+...                [3, 1, 4, 1, 4], 
+...                [4, 1, 2, 4, 3]])
+>>> moves = best_first_search(board)
 >>> moves
-[(2, 1), (2, 2), (2, 2), (2, 1), (2, 1), (2, 0), (2, 0), (2, 0)]
->>> for move in moves:
-...     board = board.click(*move)
->>> board.is_solved
+[(3, 3), (1, 4), (1, 3), (1, 1), (3, 1), (4, 1), (1, 0), (2, 0), (3, 4), (3, 0)]
+>>> board.verify_solution(moves)
 True
 
 ```
@@ -92,10 +94,9 @@ A better heuristic could help---make a PR if you have an idea!
 
 ```pycon
 >>> from solvers import a_star_search
->>> board = Board(grid=[[1, 1, 2], [2, 3, 1], [4, 2, 2]])
 >>> moves = a_star_search(board)
 >>> moves
-[(1, 1), (2, 0), (1, 0), (1, 2)]
+[(2, 0), (3, 0), (4, 1), (0, 3), (3, 3), (2, 2), (3, 4), (4, 4)]
 >>> board.verify_solution(moves)
 True
 
@@ -107,14 +108,11 @@ You might run out of memory before that happens though.
 
 ```pycon
 >>> from solvers import heuristic_search
->>> board = Board(grid=[[1, 1, 2], [2, 3, 1], [4, 2, 2]])
 >>> for moves in heuristic_search(board):
 ...    print(f"Found solution of length {len(moves)}: {moves}")
-Found solution of length 8: [(2, 1), (2, 2), (2, 2), (2, 1), (2, 1), (2, 0), (2, 0), (2, 0)]
-Found solution of length 7: [(0, 0), (2, 1), (1, 0), (1, 2), (2, 0), (2, 1), (2, 2)]
-Found solution of length 6: [(0, 0), (2, 0), (2, 0), (1, 2), (2, 1), (2, 2)]
-Found solution of length 5: [(0, 0), (2, 0), (1, 2), (1, 2), (2, 1)]
-Found solution of length 4: [(1, 1), (2, 0), (1, 0), (1, 2)]
+Found solution of length 10: [(3, 3), (1, 4), (1, 3), (1, 1), (3, 1), (4, 1), (1, 0), (2, 0), (3, 4), (3, 0)]
+Found solution of length 9: [(3, 3), (1, 4), (1, 3), (1, 1), (2, 0), (3, 0), (4, 1), (3, 4), (3, 0)]
+Found solution of length 8: [(3, 3), (1, 4), (1, 3), (2, 0), (3, 0), (1, 2), (4, 1), (3, 4)]
 
 ```
 
@@ -123,13 +121,11 @@ In the long run it produces a solution, but again you might run out of memory.
 
 ```pycon
 >>> from solvers import monte_carlo_search
->>> board = Board(grid=[[1, 1, 2], [2, 3, 1], [4, 2, 2]])
 >>> for moves in monte_carlo_search(board, seed=1):
 ...    print(f"Found solution of length {len(moves)}: {moves}")
-Found solution of length 8: [(2, 1), (2, 2), (2, 2), (2, 1), (2, 1), (2, 0), (2, 0), (2, 0)]
-Found solution of length 6: [(1, 1), (1, 1), (1, 2), (1, 0), (2, 0), (2, 0)]
-Found solution of length 5: [(1, 1), (2, 0), (2, 0), (2, 0), (2, 2)]
-Found solution of length 4: [(2, 0), (1, 1), (1, 0), (1, 2)]
+Found solution of length 10: [(3, 3), (1, 4), (1, 3), (1, 1), (3, 1), (4, 1), (1, 0), (2, 0), (3, 4), (3, 0)]
+Found solution of length 9: [(1, 4), (3, 3), (2, 0), (3, 0), (1, 2), (4, 1), (3, 3), (2, 4), (3, 4)]
+Found solution of length 8: [(0, 3), (3, 3), (2, 0), (3, 0), (1, 2), (4, 1), (3, 4), (4, 4)]
 
 ```
 
@@ -138,10 +134,10 @@ expands all children of those nodes, and repeats.
 
 ```pycon
 >>> from solvers import beam_search
->>> board = Board(grid=[[1, 1, 2], [2, 3, 1], [4, 2, 2]])
->>> moves = beam_search(board, beam_width=2)
->>> len(moves), moves
-(6, [(0, 0), (2, 0), (2, 0), (2, 1), (2, 2), (2, 2)])
+>>> len(beam_search(board, beam_width=2))
+9
+>>> len(beam_search(board, beam_width=4))
+8
 
 ```
 
@@ -149,12 +145,10 @@ You can also run it for `beam_width=1, 2, 4, 8, ..., 2^power`:
 
 ```pycon
 >>> from solvers import anytime_beam_search
->>> board = Board(grid=[[1, 1, 2], [2, 3, 1], [4, 2, 2]])
 >>> for moves in anytime_beam_search(board, power=5):
 ...    print(f"Found solution of length {len(moves)}: {moves}")
-Found solution of length 7: [(0, 0), (2, 1), (1, 0), (1, 2), (2, 0), (2, 1), (2, 2)]
-Found solution of length 6: [(0, 0), (1, 2), (1, 2), (2, 0), (2, 1), (2, 0)]
-Found solution of length 5: [(0, 0), (2, 0), (1, 2), (1, 2), (2, 1)]
-Found solution of length 4: [(2, 0), (1, 1), (1, 0), (1, 2)]
+Found solution of length 10: [(3, 3), (1, 4), (1, 3), (1, 1), (3, 1), (4, 1), (1, 0), (2, 0), (3, 4), (3, 0)]
+Found solution of length 9: [(2, 0), (3, 0), (4, 1), (2, 2), (3, 4), (3, 3), (3, 3), (4, 1), (4, 4)]
+Found solution of length 8: [(2, 0), (3, 0), (3, 3), (1, 2), (4, 1), (3, 4), (4, 4), (4, 3)]
 
 ```

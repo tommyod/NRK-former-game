@@ -142,19 +142,19 @@ def best_first_performance(board, simulations=100):
 
     # The lower the value of power, the more randomess
     # The higher the value of power, the more we focus on large groups of colors
-    for power in [0, 0.5, 1, 2, 5, 10, 25, None]:
-        if power is None:
+    for exponent in [1, 2, 5, 10, 25, None]:
+        if exponent is None:
             # Pure best first search
-            moves = list(best_first_search(board, power=None, seed=None))
-            yield power, [len(moves)]
+            moves = best_first_search(board, exponent=None, seed=None)
+            yield exponent, [len(moves)]
             continue
 
         results = []
         for simulation in range(simulations):
-            moves = list(best_first_search(board, power=power, seed=simulation))
+            moves = best_first_search(board, exponent=exponent, seed=simulation)
             results.append(len(moves))
 
-        yield power, results
+        yield exponent, results
 
 
 def search_timer(algorithm, *args, **kwargs):
@@ -229,7 +229,13 @@ def benchmark(algorithm, *, simulations, **kwargs):
         if LABEL_INVARIANT:
             board = LabelInvariantBoard(board.relabel().grid)
         start_time = time.perf_counter()
-        *_, moves = algorithm(board, **kwargs)
+
+        generator_or_list = algorithm(board, **kwargs)
+        if isinstance(generator_or_list, list):
+            moves = generator_or_list
+        else:
+            *_, moves = generator_or_list
+
         times.append(time.perf_counter() - start_time)
         board.verify_solution(moves)
         solution_lengths.append(len(moves))
@@ -246,9 +252,10 @@ if __name__ == "__main__":
         benchmark = functools.partial(benchmark, simulations=10)
 
         # Parameters such that each solver takes ~15s to solve an instance
-        benchmark(anytime_beam_search, power=10)
-        benchmark(heuristic_search, max_nodes=150_000)
-        benchmark(monte_carlo_search, iterations=3320, seed=1)
+        benchmark(best_first_search, exponent=None, seed=0)
+        benchmark(anytime_beam_search, power=9)
+        benchmark(heuristic_search, max_nodes=64_000, verbose=False)
+        benchmark(monte_carlo_search, iterations=650, seed=1)
 
     # Solve random boards to optimality and create a plot
     if False:
@@ -377,7 +384,7 @@ if __name__ == "__main__":
     if False:
         plt.figure(figsize=(6, 3))
         plt.title("Beam search on NRK instances")
-        MAX_POWER = 18
+        MAX_POWER = 8
 
         for board_no, instance in sorted(NRK_boards.items()):
             print(f"Beam search on board number {board_no}")

@@ -129,7 +129,7 @@ class TestNonRegressionOnPerformance:
             assert board.verify_solution(moves)
             solution_lengths.append(len(moves))
 
-        assert statistics.mean(solution_lengths) <= 16.8
+        assert statistics.mean(solution_lengths) <= 15.1
 
     def test_performance_heuristic_search(self):
         solution_lengths = []
@@ -139,7 +139,7 @@ class TestNonRegressionOnPerformance:
             assert board.verify_solution(moves)
             solution_lengths.append(len(moves))
 
-        assert statistics.mean(solution_lengths) <= 18.6
+        assert statistics.mean(solution_lengths) <= 16.1
 
     def test_performance_verify_solution(self):
         solution_lengths = []
@@ -149,7 +149,7 @@ class TestNonRegressionOnPerformance:
             assert board.verify_solution(moves)
             solution_lengths.append(len(moves))
 
-        assert statistics.mean(solution_lengths) <= 18.4
+        assert statistics.mean(solution_lengths) <= 15.8
 
 
 if __name__ == "__main__":
