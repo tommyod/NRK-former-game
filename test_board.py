@@ -144,13 +144,19 @@ class TestBoard:
         opt_moves = len(a_star_search(board))
         assert board.lower_bound <= opt_moves <= board.upper_bound
 
-    @pytest.mark.parametrize("seed", range(10))
+    @pytest.mark.parametrize("seed", range(100))
     def test_that_canonicalization_is_idempotent(self, seed):
         # Create a random board with a random shape
         rng = random.Random(seed)
         rows, cols = rng.randint(2, 4), rng.randint(2, 4)
         board = Board.generate_random(shape=(rows, cols), seed=seed).canonicalize()
+
+        # Already canonical, so canonicalization does nothing
         assert board == board.canonicalize()
+
+        # This sequence always leads to the same result
+        board = Board.generate_random(shape=(rows, cols), seed=seed)
+        assert board.relabel().flip().relabel().flip().relabel() == board.relabel()
 
     @pytest.mark.parametrize("seed", range(1))
     def test_canonical_clicks(self, seed):
