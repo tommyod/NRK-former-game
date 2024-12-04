@@ -7,6 +7,7 @@ import random
 
 
 from board import Board, CanonicalBoard
+from solvers import a_star_search
 
 
 class TestBoard:
@@ -132,23 +133,32 @@ class TestBoard:
         flipped = board.flip()
         assert flipped.grid == [[3, 2, 1], [6, 5, 4]]
 
-    @pytest.mark.parametrize("seed", range(10))
-    def test_that_relabeling_and_flipping(self, seed):
+    @pytest.mark.parametrize("seed", range(100))
+    def test_lower_and_upper_bounds(self, seed):
         # Create a random board with a random shape
         rng = random.Random(seed)
         rows, cols = rng.randint(2, 4), rng.randint(2, 4)
-        board = Board.generate_random(shape=(rows, cols), seed=seed).canonicalize()
-        assert board.relabel().flip().relabel().flip().relabel() == board.relabel()
+        board = Board.generate_random(shape=(rows, cols), seed=seed)
 
-    @pytest.mark.parametrize("seed", range(10))
+        # A* returns an optimal solution. Check that it's within bounds
+        opt_moves = len(a_star_search(board))
+        assert board.lower_bound <= opt_moves <= board.upper_bound
+
+    @pytest.mark.parametrize("seed", range(100))
     def test_that_canonicalization_is_idempotent(self, seed):
         # Create a random board with a random shape
         rng = random.Random(seed)
         rows, cols = rng.randint(2, 4), rng.randint(2, 4)
         board = Board.generate_random(shape=(rows, cols), seed=seed).canonicalize()
+
+        # Already canonical, so canonicalization does nothing
         assert board == board.canonicalize()
 
-    @pytest.mark.parametrize("seed", range(1))
+        # This sequence always leads to the same result
+        board = Board.generate_random(shape=(rows, cols), seed=seed)
+        assert board.relabel().flip().relabel().flip().relabel() == board.relabel()
+
+    @pytest.mark.parametrize("seed", range(100))
     def test_canonical_clicks(self, seed):
         # Create a random board with a random shape
         rng = random.Random(seed)

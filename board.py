@@ -24,9 +24,9 @@ Clicking on a board returns a new instance, that can be printed:
     10
     21
 
-All valid clicks (non-zero cells) are given by the `yield_clicks` method:
+All valid clicks (non-zero cells) are given by the `clicks` method:
 
-    >>> list(board.yield_clicks())
+    >>> board.clicks()
     [(0, 0), (1, 0), (1, 1)]
 
 Statistics can be retrieved using these methods:
@@ -111,6 +111,35 @@ Finally, all children (results of all valid clicks) can be retrieved:
     221
     231
     <BLANKLINE>
+
+Lower and upper bounds on the number of clicks needed to solve. This board is
+constructed so that the upper bound can be achieved:
+
+    >>> board = Board([[1, 1, 1],
+    ...               [2, 2, 2],
+    ...               [1, 1, 1],
+    ...               [2, 2, 2],
+    ...               [1, 1, 1],
+    ...               [2, 2, 2],
+    ...               [3, 1, 3],
+    ...               [1, 1, 1]])
+    >>> board.lower_bound
+    4
+    >>> board.upper_bound
+    9
+
+Lower and upper bounds on the number of clicks needed to solve. This board is
+constructed so that the upper bound can be achieved:
+
+    >>> board = Board([[0, 0, 0, 3],
+    ...                [0, 3, 3, 2],
+    ...                [3, 2, 2, 1]])
+    >>> board.lower_bound
+    3
+    >>> board.upper_bound
+    6
+
+
 """
 
 from typing import List, Tuple
@@ -147,6 +176,7 @@ class Board:
         self.grid = [row[:] for row in grid]
         self.rows = len(grid)
         self.cols = len(grid[0]) if grid else 0
+        self._clicks = None  # Cache for clicks
 
     @classmethod
     def generate_random(cls, shape=(4, 4), maximum=4, seed=None):
@@ -271,8 +301,9 @@ class Board:
         unique.discard(0)
         return len(unique)
 
-    def yield_clicks(self):
-        """Yield all combinations of (i, j) that are non-zero in the board.
+    def clicks(self):
+        """Return all unique valid clicks as a list [(i, j), ...].
+        A click is unique within a connected component of the same color.
 
         Examples
         --------
@@ -280,9 +311,15 @@ class Board:
         ...         [3, 2, 2],
         ...         [4, 4, 4]]
         >>> board = Board(grid)
-        >>> list(board.yield_clicks())
+        >>> board.clicks()
         [(0, 0), (0, 1), (0, 2), (1, 0), (2, 0)]
         """
+        # Use the cache if we have computed clicks already
+        if self._clicks is not None:
+            return self._clicks
+
+        self._clicks = []
+
         seen = set()
         for i, j in itertools.product(range(self.rows), range(self.cols)):
             # Skip zero cells
@@ -290,7 +327,7 @@ class Board:
                 continue
 
             if (i, j) not in seen:
-                yield (i, j)
+                self._clicks.append((i, j))
 
                 seen.update(
                     self._find_connected(
@@ -300,6 +337,8 @@ class Board:
                         visited=set(),
                     )
                 )
+
+        return self._clicks
 
     def children(self, return_removed=False):
         """Yields (move, board) for all children boards.
@@ -336,7 +375,7 @@ class Board:
         if self.is_solved:
             return
 
-        for i, j in self.yield_clicks():
+        for i, j in self.clicks():
             board, num_removed = self.click(i, j, return_removed=True)
 
             if return_removed:
@@ -432,6 +471,69 @@ class Board:
     def cleared(self) -> int:
         """Returns the number of cleared cells (zero cells)."""
         return len(self) - self.remaining
+
+    @functools.cached_property
+    def lower_bound(self):
+        """A lower bound on the number of clicks needed to solve.
+
+        The simplest lower bound is to count the unique number of non-zero
+        integers. A better heuristic (this one) looks at each color in turn.
+        For each color, count whether it appears in each column. For each group
+        of columns, separated by columns where the color does not appear, check
+        if the color appears. Each color separated by non-colors needs at most
+        one move.
+
+        Examples
+        --------
+        >>> board = Board([[1, 2, 1],
+        ...                [2, 2, 2],
+        ...                [1, 2, 1]])
+        >>> board.lower_bound
+        3
+        >>> board = Board([[1, 3, 1],
+        ...                [2, 3, 1],
+        ...                [1, 3, 1]])
+        >>> board.lower_bound
+        4
+        """
+
+        def consecutive_groups(tuple_):
+            """Count consecutive groups of True."""
+            return sum(1 for key, group in itertools.groupby(tuple_) if key)
+
+        # Transpose the grid
+        matrix = list(map(list, zip(*self.grid)))
+
+        # Get the unique integers larger than zero in the matrix
+        unique_integers = set(c for col in matrix for c in col if c > 0)
+
+        # For every integer, see if it exists in each column
+        integer_in_col = (tuple((c in col) for col in matrix) for c in unique_integers)
+
+        # Count groups of integers separated by other integers
+        return sum(consecutive_groups(int_in_col) for int_in_col in integer_in_col)
+
+    @property
+    def upper_bound(self):
+        """An upper bound on the number of clicks needed to solve.
+
+        This heuristic counts the number of unique valid clicks, i.e., the
+        number of connected groups of the same color / integer. By starting
+        from the top of the board and never choosing a group that merges other
+        groups further down, we can realize this bound. In the example below,
+        this amounts to choosing 1, 2, 3 and then 4.
+
+
+        Examples
+        --------
+        >>> board = Board([[1, 1, 2],
+        ...                [2, 2, 2],
+        ...                [3, 3, 4],
+        ...                [4, 4, 4]])
+        >>> board.upper_bound
+        4
+        """
+        return len(self.clicks())
 
     def display(self, click=None):
         """Print current board state."""
@@ -621,7 +723,7 @@ class LabelInvariantBoard(Board):
         """
         seen = set()
 
-        for i, j in self.yield_clicks():
+        for i, j in self.clicks():
             board, num_removed = self.click(i, j, return_removed=True)
             board = type(self)(board.grid, check=False)
 
@@ -692,7 +794,7 @@ class CanonicalBoard(Board):
         seen = set()
         non_canonical_board = Board(self.grid)
 
-        for i, j in non_canonical_board.yield_clicks():
+        for i, j in non_canonical_board.clicks():
             board, num_removed = non_canonical_board.click(i, j, return_removed=True)
 
             # TODO: To recover solution path, flips must be taken into account.

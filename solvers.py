@@ -316,7 +316,7 @@ class AStarNode:
         return len(self.moves)
 
     def h(self):
-        return estimate_remaining(self.board)
+        return self.board.lower_bound
 
     @functools.cached_property
     def f(self):
@@ -375,61 +375,6 @@ def a_star_search(board: Board) -> list:
                 heappush(heap, next_node)
 
 
-@functools.lru_cache(maxsize=2**8)  # 256
-def consecutive_groups(tuple_):
-    """Count how many consecutive groups of True there are.
-
-    Examples
-    --------
-    >>> consecutive_groups((True, True, True))
-    1
-    >>> consecutive_groups((True, False, True))
-    2
-    >>> consecutive_groups((True, True, False))
-    1
-    >>> consecutive_groups((False, True, True, False, False, True, True))
-    2
-    """
-    return sum(1 for key, group in itertools.groupby(tuple_) if key)
-
-
-@functools.lru_cache(maxsize=2**14)  # 16384
-def estimate_remaining(board: Board) -> int:
-    """A lower bound on how many moves are needed to solve.
-
-    A simple heuristic (not this one) is to use unique number of non-zero
-    integers. A better heuristic (this one) looks at each color in turn.
-    For each color, count whether it appears in each column. For each group
-    of columns, separated by columns where the color does not appear, check
-    if the color appears. Each color separated by non-colors needs at most
-    one move.
-
-    Examples
-    --------
-    >>> board = Board([[1, 2, 1],
-    ...                [2, 2, 2],
-    ...                [1, 2, 1]])
-    >>> estimate_remaining(board)
-    3
-    >>> board = Board([[1, 3, 1],
-    ...                [2, 3, 1],
-    ...                [1, 3, 1]])
-    >>> estimate_remaining(board)
-    4
-    """
-    # Transpose the grid
-    matrix = list(map(list, zip(*board.grid)))
-
-    # Get the unique integers larger than zero in the matrix
-    unique_integers = set(c for col in matrix for c in col if c > 0)
-
-    # For every integer, see if it exists in each column
-    integer_in_col = (tuple((c in col) for col in matrix) for c in unique_integers)
-
-    # Count groups of integers separated by other integers
-    return sum(consecutive_groups(int_in_col) for int_in_col in integer_in_col)
-
-
 # =============================================================================
 
 
@@ -444,12 +389,12 @@ class BeamNode:
     @functools.cached_property
     def remaining(self):
         # Lower is better, so negate signs
-        return -estimate_remaining(self.board)
+        return -self.board.lower_bound
 
     @functools.cached_property
     def remaining_groups(self):
         # Lower is better, so negate signs
-        return -len(list(self.board.yield_clicks()))
+        return -self.board.upper_bound
 
     @functools.cached_property
     def cleared_per_move(self):
@@ -526,7 +471,7 @@ def beam_search(board: Board, *, beam_width: int = 3, shortest_path=None) -> lis
             next_beam = (
                 node
                 for node in next_beam
-                if len(node.moves) + estimate_remaining(node.board) < shortest_path
+                if len(node.moves) + node.board.lower_bound < shortest_path
             )
 
         # Keep only the best beam_width nodes
@@ -570,7 +515,7 @@ def anytime_beam_search(board, *, power: int = 1, verbose: bool = False):
             break
 
         # If we cannot possibly do better, stop searching
-        if estimate_remaining(board) >= shortest_path:
+        if shortest_path <= board.lower_bound:
             break
 
         if verbose:
@@ -628,11 +573,11 @@ class HeuristicNode:
 
     @functools.cached_property
     def heuristic(self):
-        return -(self.num_moves + estimate_remaining(self.board))
+        return -(self.num_moves + self.board.lower_bound)
 
     @functools.cached_property
     def remaining_groups(self):
-        return -len(list(self.board.yield_clicks()))
+        return -self.board.upper_bound
 
     def __lt__(self, other):
         """Implements < comparison operator, needed for heapq."""
@@ -697,7 +642,7 @@ def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=F
             )
 
         # The lower bound f(n) = g(n) + h(n) >= best we've seen, so skip it
-        if current_g + estimate_remaining(current.board) >= shortest_path:
+        if current_g + current.board.lower_bound >= shortest_path:
             continue
 
         # The path to current node is longer than what we've seen, so skip it
@@ -712,9 +657,7 @@ def heuristic_search(board: Board, *, max_nodes=0, shortest_path=None, verbose=F
 
             # Filter the heap, removing every node that cannot be better
             heap = [
-                n
-                for n in heap
-                if len(n.moves) + estimate_remaining(n.board) < shortest_path
+                n for n in heap if len(n.moves) + n.board.lower_bound < shortest_path
             ]
             heapify(heap)
 
@@ -763,11 +706,11 @@ class MCTSNode:
 
     @functools.cached_property
     def remaining(self):
-        return estimate_remaining(self.board)
+        return self.board.lower_bound
 
     @functools.cached_property
     def remaining_groups(self):
-        return len(list(self.board.yield_clicks()))
+        return self.board.upper_bound
 
     def ucb_score(self, exploration=1.41):
         """Calculate UCB score for node selection."""
@@ -893,9 +836,9 @@ def monte_carlo_search(
                 break
 
             # We cannot possibly improve on what we already have
-            if node.depth + estimate_remaining(node.board) >= shortest_path:
+            if node.depth + node.board.lower_bound >= shortest_path:
                 vprint(
-                    f" Pruning: depth + h(board) >= shortest ({node.depth} + {estimate_remaining(node.board)} >= {shortest_path})",
+                    f" Pruning: depth + h(board) >= shortest ({node.depth} + {node.board.lower_bound} >= {shortest_path})",
                     v=3,
                 )
 
