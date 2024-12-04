@@ -158,7 +158,7 @@ class TestBoard:
         board = Board.generate_random(shape=(rows, cols), seed=seed)
         assert board.relabel().flip().relabel().flip().relabel() == board.relabel()
 
-    @pytest.mark.parametrize("seed", range(1))
+    @pytest.mark.parametrize("seed", range(100))
     def test_canonical_clicks(self, seed):
         # Create a random board with a random shape
         rng = random.Random(seed)
