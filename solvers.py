@@ -321,23 +321,20 @@ class AStarNode:
     board: Board
     moves: tuple  # Using tuple instead of list since lists aren't hashable
 
-    def g(self):
-        return len(self.moves)
 
-    def h(self):
-        return self.board.lower_bound
-
-    @functools.cached_property
     def f(self):
-        num_moves = len(self.moves)
+        if not self.moves:
+            return 0
         # Return (admissible_heuristic(), non_admissible(), non_admissible())
         # The overall result is still admissible, but the second and third
         # component of the tuple act as tie-breakers
-        cleared_per_move = self.board.cleared / num_moves
-        return (self.g() + self.h(), -cleared_per_move, -num_moves)
+        lower_bound = len(self.moves) + self.board.lower_bound
+        upper_bound = len(self.moves) + self.board.upper_bound
+        cleared_per_move = self.board.cleared / len(self.moves)
+        return (lower_bound, upper_bound, -cleared_per_move)
 
     def __lt__(self, other):
-        return self.f < other.f
+        return self.f() < other.f()
 
 
 def a_star_search(board: Board) -> list:
