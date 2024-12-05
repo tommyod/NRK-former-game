@@ -321,7 +321,6 @@ class AStarNode:
     board: Board
     moves: tuple  # Using tuple instead of list since lists aren't hashable
 
-
     def f(self):
         if not self.moves:
             return 0
@@ -576,9 +575,6 @@ def heuristic_search(
         current = heappop(heap)
         current_g = len(current.moves)  # g(node) = number of moves
         popped_counter += 1
-
-        # if current_g + current.board.upper_bound < shortest_path:
-        #    print(f"{current_g=} + {current.board.upper_bound=} < {shortest_path=}")
 
         if popped_counter % max((max_nodes // 100), 1) == 0 and verbose:
             msg = f"""Nodes popped:{popped_counter}  Progress:{popped_counter/max_nodes:.1%}  Shortest path:{shortest_path}
