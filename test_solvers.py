@@ -6,7 +6,6 @@ import pytest
 import random
 import statistics
 import itertools
-import os
 
 
 from board import Board, LabelInvariantBoard
@@ -126,9 +125,12 @@ class TestSolvers:
         for m1, m2 in itertools.pairwise(moves_heuristic):
             assert len(m1) > len(m2)
 
-        # Get last solution
-        *_, moves_heuristic = moves_heuristic
-        assert len(moves_heuristic) == len(moves_astar)
+        for moves in heuristic_search(board):
+            assert board.verify_solution(moves)
+            if len(moves_astar) == len(moves):
+                break
+        else:
+            assert False
 
     @pytest.mark.parametrize("seed", range(100))
     def test_that_beam_search_yields_optimal_solution(self, seed):
@@ -223,7 +225,6 @@ def test_that_astar_solutions_are_within_bounds(seed):
 
 
 class TestNonRegressionOnPerformance:
-    @pytest.mark.skipif(not os.getenv("CI"), reason="Test runs only on CI")
     def test_performance_anytime_beam_search(self):
         # Takes around 1.5s per board
         solution_lengths = []
@@ -235,7 +236,6 @@ class TestNonRegressionOnPerformance:
 
         assert statistics.mean(solution_lengths) <= 15.0
 
-    @pytest.mark.skipif(not os.getenv("CI"), reason="Test runs only on CI")
     def test_performance_heuristic_search(self):
         # Takes around 1.5s per board
         solution_lengths = []
@@ -247,7 +247,6 @@ class TestNonRegressionOnPerformance:
 
         assert statistics.mean(solution_lengths) <= 15.0
 
-    @pytest.mark.skipif(not os.getenv("CI"), reason="Test runs only on CI")
     def test_performance_monte_carlo_search(self):
         solution_lengths = []
         for seed in range(30):
