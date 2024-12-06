@@ -541,19 +541,37 @@ class Board:
         """An upper bound on the optimal solution (minimum moves needed).
 
         This heuristic counts the number of unique valid clicks, i.e., the
-        number of connected groups of the same color / integer. By starting
-        from the top of the board and never choosing a group that merges other
-        groups further down, we can realize this bound. In the example below,
-        this amounts to choosing 1, 2, 3 and then 4.
+        number of connected groups of the same color / integer. This seems
+        to be an upper bound on the optimal solution, but I have been unable
+        to prove it. If you can prove it, submit a PR and let me know :)
+
+        Below are two examples where it's not obvious how to attain the bound,
+        because we cannot simply start from the top. However, the bounds can
+        be attained here too.
 
         Examples
         --------
-        >>> board = Board([[1, 1, 2],
-        ...                [2, 2, 2],
-        ...                [3, 3, 4],
-        ...                [4, 4, 4]])
-        >>> board.upper_bound
+
+        The upper bound cannot be realized by an algorithm that starts at
+        the top group. Here is a counterexample:
+
+        >>> board = Board([[1, 1],
+        ...                [1, 3],
+        ...                [1, 1],
+        ...                [3, 3]])
+        >>> board.upper_bound  # Can be solved in 2 clicks
+        3
+
+        The upper bound cannot be realized by an algorithm that only makes
+        moves where the upper bound goes down by 1. Here is a counterexample:
+
+        >>> board = Board([[4, 4, 4],
+        ...                [4, 2, 1],
+        ...                [4, 4, 2]])
+        >>> board.upper_bound  # Can be solved in 3 clicks
         4
+        >>> print([child.upper_bound for _, child in board.children()])
+        [2, 4, 4, 4]
         """
         return len(self.clicks())
 
