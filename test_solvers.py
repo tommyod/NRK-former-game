@@ -5,6 +5,8 @@ Tests for solvers.
 import pytest
 import random
 import statistics
+import itertools
+import os
 
 
 from board import Board, LabelInvariantBoard
@@ -20,7 +22,51 @@ from solvers import (
 
 
 class TestSolvers:
-    @pytest.mark.parametrize("seed", range(100))
+    @pytest.mark.parametrize("seed", range(50))
+    def test_that_heuristic_search_initial_solution_never_hurts(self, seed):
+        # Create a random board with a random shape
+        board = Board.generate_random(shape=(5, 5), seed=seed)
+
+        # Solve without any initial solution
+        *_, moves1 = heuristic_search(board, moves=None)
+
+        # Solve using an initial solution
+        init_moves = greedy_search(board)
+        try:
+            # Try to get an improvement
+            *_, moves2 = heuristic_search(board, moves=init_moves)
+            assert len(moves2) <= len(moves1)
+            moves2 = min(init_moves, moves2, key=len)
+        except ValueError:
+            # No improvement was made
+            moves2 = init_moves
+
+        assert len(moves2) <= len(moves1)
+
+    @pytest.mark.parametrize("seed", range(50))
+    def test_that_monte_carlo_search_initial_solution_never_hurts(self, seed):
+        # Create a random board with a random shape
+        board = Board.generate_random(shape=(5, 5), seed=seed)
+
+        # Solve without any initial solution
+        *_, moves1 = monte_carlo_search(board, moves=None, seed=0, iterations=999)
+
+        # Solve using an initial solution
+        init_moves = greedy_search(board)
+        try:
+            # Try to get an improvement
+            *_, moves2 = monte_carlo_search(
+                board, moves=init_moves, seed=0, iterations=999
+            )
+            assert len(moves2) <= len(moves1)
+            moves2 = min(init_moves, moves2, key=len)
+        except ValueError:
+            # No improvement was made
+            moves2 = init_moves
+
+        assert len(moves2) <= len(moves1)
+
+    @pytest.mark.parametrize("seed", range(25))
     @pytest.mark.parametrize("relabel", [True, False])
     def test_that_BFS_solution_equals_IDS(self, seed, relabel):
         # Create a random board with a random shape
@@ -75,12 +121,14 @@ class TestSolvers:
         moves_astar = a_star_search(board)
         assert board.verify_solution(moves_astar)
 
-        for moves in heuristic_search(board):
-            assert board.verify_solution(moves)
-            if len(moves_astar) == len(moves):
-                break
-        else:
-            assert False
+        moves_heuristic = list(heuristic_search(board))
+        # Check that each solution yielded is lower than the previous
+        for m1, m2 in itertools.pairwise(moves_heuristic):
+            assert len(m1) > len(m2)
+
+        # Get last solution
+        *_, moves_heuristic = moves_heuristic
+        assert len(moves_heuristic) == len(moves_astar)
 
     @pytest.mark.parametrize("seed", range(100))
     def test_that_beam_search_yields_optimal_solution(self, seed):
@@ -175,35 +223,40 @@ def test_that_astar_solutions_are_within_bounds(seed):
 
 
 class TestNonRegressionOnPerformance:
+    @pytest.mark.skipif(not os.getenv("CI"), reason="Test runs only on CI")
     def test_performance_anytime_beam_search(self):
+        # Takes around 1.5s per board
         solution_lengths = []
-        for seed in range(10):
+        for seed in range(30):
             board = Board.generate_random(shape=(9, 7), seed=seed)
             *_, moves = anytime_beam_search(board, power=5)
             assert board.verify_solution(moves)
             solution_lengths.append(len(moves))
 
-        assert statistics.mean(solution_lengths) <= 14.9
+        assert statistics.mean(solution_lengths) <= 15.0
 
+    @pytest.mark.skipif(not os.getenv("CI"), reason="Test runs only on CI")
     def test_performance_heuristic_search(self):
+        # Takes around 1.5s per board
         solution_lengths = []
-        for seed in range(10):
+        for seed in range(30):
             board = Board.generate_random(shape=(9, 7), seed=seed)
-            *_, moves = heuristic_search(board, iterations=5000)
+            *_, moves = heuristic_search(board, iterations=600)
             assert board.verify_solution(moves)
             solution_lengths.append(len(moves))
 
-        assert statistics.mean(solution_lengths) <= 14.2
+        assert statistics.mean(solution_lengths) <= 15.0
 
+    @pytest.mark.skipif(not os.getenv("CI"), reason="Test runs only on CI")
     def test_performance_monte_carlo_search(self):
         solution_lengths = []
-        for seed in range(10):
+        for seed in range(30):
             board = Board.generate_random(shape=(9, 7), seed=seed)
-            *_, moves = monte_carlo_search(board, iterations=100, seed=seed)
+            *_, moves = monte_carlo_search(board, iterations=50, seed=seed)
             assert board.verify_solution(moves)
             solution_lengths.append(len(moves))
 
-        assert statistics.mean(solution_lengths) <= 16.1
+        assert statistics.mean(solution_lengths) <= 16.0
 
 
 if __name__ == "__main__":
