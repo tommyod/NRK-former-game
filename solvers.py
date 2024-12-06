@@ -10,7 +10,7 @@ The board below can be solved in 3 moves, but best-first uses 4 moves.
 ...         [2, 2, 3],
 ...         [2, 1, 2]]
 >>> board = Board(grid)
->>> moves = list(best_first_search(board))
+>>> moves = greedy_search(board)
 >>> moves
 [(0, 0), (2, 1), (1, 0)]
 >>> board.verify_solution(moves)
@@ -90,7 +90,7 @@ Monte Carlo search
 ...         [2, 2, 3],
 ...         [2, 1, 2]]
 >>> board = Board(grid)
->>> solutions = monte_carlo_search(board)
+>>> solutions = monte_carlo_search(board, seed=0)
 >>> for moves in solutions:
 ...     print(moves)
 [(0, 0), (2, 1), (1, 0)]
@@ -104,16 +104,12 @@ Monte Carlo search
 [(1, 2), (0, 1), (2, 0), (4, 0), (3, 3)]
 >>> len(moves) == len(a_star_search(board))
 True
-
-
-
 """
 
 import math
-from typing import Optional, List, Set
+from typing import Optional, List, Set, Callable
 import dataclasses
 from heapq import heappush, heappop, heapify, nsmallest
-from collections import deque
 import pytest
 import random
 import itertools
@@ -123,9 +119,21 @@ from board import Board
 
 
 def middle_bound(node):
-    alpha = 0.4
+    """Default key function. Used to prioritize nodes in various algorithms."""
+
+    # Priority 1: Compute a biased average of total moves => lower is better
+    alpha = 0.3  # Experiments show that 0.3 is a good value
     avg = (1 - alpha) * node.board.lower_bound + alpha * node.board.upper_bound
-    return len(node.moves) + avg - 0.1 * node.cleared
+    expected = len(node.moves) + avg
+
+    # Priority 2: Compute the range between low and high => lower is better
+    assert node.board.upper_bound >= node.board.lower_bound
+    range_ = abs(node.board.upper_bound - node.board.lower_bound) ** 0.5
+
+    # Priority 3: Cleared per move => higher is better
+    cleared_per_move = node.cleared / len(node.moves) if node.moves else 0
+
+    return 1.0 * expected + 0.1 * range_ - 0.01 * cleared_per_move
 
 
 def unique_everseen(iterable, key=None):
@@ -159,61 +167,61 @@ def unique_everseen(iterable, key=None):
 
 
 @dataclasses.dataclass(frozen=True, eq=False, order=False)
-class BestFirstNode:
-    """Make board states comparable for search."""
-
+class Node:
     board: Board
     moves: tuple  # Using tuple instead of list since lists aren't hashable
     cleared: int = 0
 
 
-def best_first_search(board: Board, *, exponent=None, seed=None, key=None):
-    """Greedy search. Choose the move that clears the most cells.
+def greedy_search(board: Board, *, key: Optional[Callable[Board, float]] = None):
+    """Expand all children, selects the best one and repeat.
 
-    If power is a number, then the algorithm is no longer deterministic.
-    Instead, it records the number of cleared cells per child and chooses
-    a random move with probability weights: cleared**power
+    The `key` argument can be function that evalutes a node. A node has three
+    attributes: the board (`board`), a tuple containing moves (`moves`) and
+    the number of cleared cells (`cleared`) in the board. The function returns
+    a number, and a low number means a high priority.
 
     Examples
     --------
+
+    The default heuristic used when key=None is quite good:
+
     >>> board = Board([[0, 0, 0, 3],
     ...                [3, 3, 3, 2],
     ...                [3, 2, 2, 1]])
-    >>> best_first_search(board)
+    >>> greedy_search(board, key=None)
     [(2, 3), (1, 0), (2, 1)]
+
+    To maximize the number of cells cleared per mode:
+
+    >>> def cleared_per_move(node):
+    ...     return -node.cleared / len(node.moves)
+    >>> greedy_search(board, key=cleared_per_move)
+    [(1, 0), (2, 1), (0, 3), (1, 3), (2, 3)]
+
+    A randomized algorithm can be implemented as follows:
+
+    >>> import random
+    >>> rng = random.Random(0)
+    >>> def random(node):
+    ...     return rng.random()
+    >>> greedy_search(board, key=random)
+    [(2, 1), (1, 3), (2, 3), (1, 0)]
     """
-    assert exponent is None or exponent >= 1
     key = middle_bound if key is None else key
+    node = Node(board.copy(), moves=(), cleared=board.cleared)
 
-    rng = random.Random(seed)
-    node = BestFirstNode(board.copy(), moves=(), cleared=board.cleared)
-
-    while True:
-        # Board is solved, return the moves
-        if node.board.is_solved:
-            return list(node.moves)
-
+    while not node.board.is_solved:
         # Generate all children
-        child_nodes = [
-            BestFirstNode(
-                child, moves=node.moves + (move,), cleared=node.cleared + num_removed
-            )
+        child_nodes = (
+            Node(child, moves=node.moves + (move,), cleared=node.cleared + num_removed)
             for move, child, num_removed in node.board.children(return_removed=True)
-        ]
+        )
 
-        # Deterministic selection of the next move
-        if exponent is None:
-            node = min(child_nodes, key=key)
+        node = min(child_nodes, key=key)
 
-        # Randomized selection of the next move
-        else:
-            # Score all child nodes
-            scores = [key(node) for node in child_nodes]
-
-            # Normalize all scores to be positive, then compute 2**-score
-            min_scores = min(scores)
-            weights = [exponent ** (min_scores - score) for score in scores]
-            node = rng.choices(child_nodes, weights=weights, k=1)[0]
+    # The board is solved, return the moves
+    return list(node.moves)
 
 
 def breadth_first_search(board: Board) -> list:
@@ -231,28 +239,12 @@ def breadth_first_search(board: Board) -> list:
     [(2, 3), (1, 0), (2, 1)]
     """
 
-    # Queue of (board, moves) tuples using a deque for efficient popleft
-    queue = deque([(board.copy(), [])])
+    def path_length(node):
+        """Breadth-first-search always explores depth i before i+1."""
+        return len(node.moves)
 
-    # Track visited states to avoid cycles
-    visited = {board.copy()}
-
-    while queue:
-        current_board, moves = queue.popleft()
-
-        # Check if we've found a solution
-        if current_board.is_solved:
-            return moves
-
-        # Try all possible moves from current state
-        for (i, j), next_board in current_board.children():
-            # Skip if we've seen this state before
-            if next_board in visited:
-                continue
-
-            # Add new state to queue and visited set
-            visited.add(next_board)
-            queue.append((next_board, moves + [(i, j)]))
+    *_, moves = heuristic_search(board, key=path_length)
+    return moves
 
 
 def depth_limited_search(board: Board, *, depth_limit: int) -> Optional[list]:
@@ -314,28 +306,6 @@ def iterative_deepening_search(board: Board) -> list:
 # =============================================================================
 
 
-@dataclasses.dataclass(frozen=True, eq=False, order=False)
-class AStarNode:
-    """Make board states comparable for search."""
-
-    board: Board
-    moves: tuple  # Using tuple instead of list since lists aren't hashable
-
-    def f(self):
-        if not self.moves:
-            return 0
-        # Return (admissible_heuristic(), non_admissible(), non_admissible())
-        # The overall result is still admissible, but the second and third
-        # component of the tuple act as tie-breakers
-        lower_bound = len(self.moves) + self.board.lower_bound
-        upper_bound = len(self.moves) + self.board.upper_bound
-        cleared_per_move = self.board.cleared / len(self.moves)
-        return (lower_bound, upper_bound, -cleared_per_move)
-
-    def __lt__(self, other):
-        return self.f() < other.f()
-
-
 def a_star_search(board: Board) -> list:
     """A star search with a consistent heuristic. Guaranteed to find the
     optimal solution.
@@ -351,45 +321,27 @@ def a_star_search(board: Board) -> list:
     [(0, 0), (2, 1), (1, 0)]
     """
 
-    # f(n) = num_moves + heuristic(n), board, moves in a SearchNode class
-    heap = [AStarNode(board.copy(), moves=())]
-    g_scores = {board.copy(): 0}  # Keep track of nodes seen and number of moves
+    def admissible_heuristic(node):
+        """Admissible heurisic used for A*"""
+        if not node.moves:
+            return 0
+        # Return (admissible_heuristic(), non_admissible(), non_admissible())
+        # The overall result is still admissible, but the second and third
+        # component of the tuple act as tie-breakers
+        lower_bound = len(node.moves) + node.board.lower_bound
+        upper_bound = len(node.moves) + node.board.upper_bound
+        cleared_per_move = node.board.cleared / len(node.moves)
+        return (lower_bound, upper_bound, -cleared_per_move)
 
-    while heap:
-        # Pop the smallest item from the heap
-        current = heappop(heap)
-        current_g = len(current.moves)
-
-        # The path to current node is larger than what we've seen, so skip it
-        if current_g > g_scores[current.board]:
-            continue
-
-        # The board is solved, return the list of moves
-        if current.board.is_solved:
-            return list(current.moves)
-
-        # Go through all children, created by applying a single move
-        for (i, j), next_board in current.board.children():
-            # Increment by one, since we need to make one more move to get here
-            g = current_g + 1
-
-            # If not seen before, or the path is lower than recorded
-            if (next_board not in g_scores) or (g < g_scores[next_board]):
-                g_scores[next_board] = g
-                next_node = AStarNode(next_board, moves=current.moves + ((i, j),))
-                heappush(heap, next_node)
+    *_, moves = heuristic_search(board, key=admissible_heuristic)
+    return moves
 
 
 # =============================================================================
 
 
-@dataclasses.dataclass(frozen=True, eq=False, order=False)
-class BeamNode:
+class BeamNode(Node):
     """Node for beam search with evaluation function."""
-
-    board: Board
-    moves: tuple
-    cleared: int = 0
 
     def __eq__(self, other):
         # Implemented to apply `unique_everseen` to nodes, to remove duplicates
@@ -477,7 +429,6 @@ def anytime_beam_search(board, *, power: int = 1, key=None, verbose: bool = Fals
     >>> for moves in anytime_beam_search(board, power=6):
     ...     assert board.verify_solution(moves)
     ...     print(f'Solution of length {len(moves)}')
-    Solution of length 8
     Solution of length 7
     """
     power_is_None = power is None
@@ -510,7 +461,7 @@ def anytime_beam_search(board, *, power: int = 1, key=None, verbose: bool = Fals
         else:
             no_improvement_count += 1
 
-        # If power is None, stop after no improvements for several
+        # If power is None, stop after no improvements for several iterations
         if power_is_None and no_improvement_count >= 3:
             break
 
@@ -518,21 +469,8 @@ def anytime_beam_search(board, *, power: int = 1, key=None, verbose: bool = Fals
 # =============================================================================
 
 
-@dataclasses.dataclass(frozen=True, eq=False, order=False)
-class HeuristicNode:
-    """Make board states comparable for search.
-
-    The comparison operator < is needed for heapq. Here we switch signs in the
-    __lt__ implementation, so that every property is better if it is higher.
-    """
-
-    board: Board
-    moves: tuple
-    cleared: int = None
-
-
 def heuristic_search(
-    board: Board, *, max_nodes=0, shortest_path=None, key=None, verbose=False
+    board: Board, *, iterations=0, moves=None, key=None, verbose=False
 ):
     """A heuristic search that yields solutions as they are found.
 
@@ -551,43 +489,55 @@ def heuristic_search(
     Solution of length 3: [(2, 3), (1, 0), (2, 1)]
     """
     key = middle_bound if key is None else key
-    shortest_path = shortest_path or float("inf")
+    shortest_path = len(moves) if moves else float("inf")
 
-    class LocalHeuristicNode(HeuristicNode):
+    class HeuristicNode(Node):
         def __lt__(self, other):
             return key(self) < key(other)
 
-    # Yield a greedy solution, which also gives a lower bound on the solution
-    yield (greedy_solution := best_first_search(board, key=key, exponent=None))
-    shortest_path = min(len(greedy_solution), shortest_path)
+    def prune(heap, num_moves, shortest_path):
+        """Prune nodes that will lead nowhere."""
+
+        # Filter the heap
+        def should_be_kept(node):
+            return len(node.moves) + node.board.lower_bound < shortest_path
+
+        heap = list(filter(should_be_kept, heap))
+        heapify(heap)
+
+        # Filter the scores
+        boards = set(n.board for n in heap)
+        num_moves = {b: v for (b, v) in num_moves.items() if b in boards}
+        return heap, num_moves
 
     # Add the board to the heap
-    heap = [LocalHeuristicNode(board.copy(), moves=(), cleared=board.cleared)]
-    g_scores = {board: 0}  # Keep track of nodes seen and number of moves
+    heap = [HeuristicNode(board.copy(), moves=(), cleared=board.cleared)]
+    num_moves = {board: 0}  # Keep track of nodes seen and number of moves
 
     popped_counter = 0
     while heap:
-        # Terminate the search
-        if max_nodes and popped_counter > max_nodes:
+        # We have popped `max_nodes` => terminate the search
+        if iterations and popped_counter >= iterations:
             return
 
         # Pop the the highest-priority node from the heap
         current = heappop(heap)
-        current_g = len(current.moves)  # g(node) = number of moves
+        depth = len(current.moves)  # g(node) = number of moves
         popped_counter += 1
 
-        if popped_counter % max((max_nodes // 100), 1) == 0 and verbose:
-            msg = f"""Nodes popped:{popped_counter}  Progress:{popped_counter/max_nodes:.1%}  Shortest path:{shortest_path}
+        if popped_counter % max((iterations // 100), 1) == 0 and verbose:
+            msg = f"""Nodes popped:{popped_counter:_}  Iterations:{iterations:_}  Shortest path:{shortest_path}
  Heuristic function value:{key(current):.2f}
- Depth:{len(current.moves)}  In queue:{len(heap)}  Seen:{len(g_scores)}"""
+ Depth:{depth}  Bounds:[{depth + current.board.lower_bound}, {depth + current.board.upper_bound}] 
+ In queue:{len(heap):_}  Seen:{len(num_moves):_}"""
             print(msg)
 
         # The lower bound f(n) = g(n) + h(n) >= best we've seen, so skip it
-        if current_g + current.board.lower_bound >= shortest_path:
+        if depth + current.board.lower_bound >= shortest_path:
             continue
 
         # The path to current node is longer than what we've seen, so skip it
-        if current_g > g_scores[current.board]:
+        if depth > num_moves[current.board]:
             continue
 
         # The board is solved. If the path is shorter than what we have,
@@ -595,27 +545,26 @@ def heuristic_search(
         if current.board.is_solved and len(current.moves) < shortest_path:
             yield list(current.moves)
             shortest_path = len(current.moves)
+            heap, num_moves = prune(heap, num_moves, shortest_path)
 
-            # Filter the heap, removing every node that cannot be better
-            heap = [
-                n for n in heap if len(n.moves) + n.board.lower_bound < shortest_path
-            ]
-            heapify(heap)
-
-            # Filter the scores
-            boards = set(n.board for n in heap)
-            g_scores = {b: v for (b, v) in g_scores.items() if b in boards}
-            del boards
+        # The upper bound on this node is lower than what we have seen,
+        # so we attempt to attain the bound immediately
+        if depth + current.board.upper_bound < shortest_path:
+            moves = greedy_search(current.board, key=key)
+            if len(moves) < current.board.upper_bound:
+                yield list(current.moves) + moves
+                shortest_path = len(current.moves) + len(moves)
+                heap, num_moves = prune(heap, num_moves, shortest_path)
 
         # Go through all children, created by applying a single move
         children = current.board.children(return_removed=True)
         for (i, j), child_board, num_removed in children:
-            g = current_g + 1  # One more move is needed to reach the child
+            g = depth + 1  # One more move is needed to reach the child
 
             # If not seen before, or the path is lower than recorded
-            if (child_board not in g_scores) or (g < g_scores[child_board]):
-                g_scores[child_board] = g
-                next_node = LocalHeuristicNode(
+            if (child_board not in num_moves) or (g < num_moves[child_board]):
+                num_moves[child_board] = g
+                next_node = HeuristicNode(
                     board=child_board,
                     moves=current.moves + ((i, j),),
                     cleared=current.cleared + num_removed,
@@ -642,55 +591,29 @@ class MCTSNode:
     cleared_cells_in_move: int = 0  # Cleared by last move
 
     def __post_init__(self):
-        self.children = []
-
-    @functools.cached_property
-    def remaining(self):
-        return self.board.lower_bound
-
-    @functools.cached_property
-    def remaining_groups(self):
-        return self.board.upper_bound
+        self.children = []  # Cache for children
 
     def ucb_score(self, exploration=1.41):
         """Calculate UCB score for node selection."""
         if not self.visits:
             # If not visisted, return UCB of +inf and tie-break with h(n)
-            return float("inf")
+            return -float("inf")
 
         exploit = self.score / self.visits
+        # Fewer visits => 1/sqrt(visits) is larger => min() selects this node
         explore = exploration * math.sqrt(math.log(self.parent.visits) / self.visits)
-
-        # Return UCB score, and use the admissible heuristic as tie-breaker
-        return exploit + explore
-
-    def __lt__(self, other):
-        """Implementing < (__lt__) is needed for max() to work."""
-
-        # UCB score is the main comparison metric
-        if self.ucb_score() != other.ucb_score():
-            return self.ucb_score() < other.ucb_score()
-
-        # If UCB score is the same
-        attrs = ["remaining", "remaining_groups"]
-        self_values = (getattr(self, attr) for attr in attrs)
-        other_values = (getattr(other, attr) for attr in attrs)
-
-        for self_v, other_v in zip(self_values, other_values):
-            if self_v != other_v:
-                # Switch comparison from < to > means that lower is better
-                return self_v > other_v
-
-        return False
+        return exploit - explore
 
     def expand(self) -> List["MCTSNode"]:
         """Create child nodes for all possible moves."""
+        # Use cache if we have it
         if self.children:
             return self.children
 
+        # Expand all children and create child nodes, store in cache
         children = self.board.children(return_removed=True)
         for move, next_board, num_removed in children:
-            child = MCTSNode(
+            child = type(self)(
                 next_board,
                 move=move,
                 parent=self,
@@ -702,14 +625,22 @@ class MCTSNode:
 
         return self.children
 
-    def construct_moves(self):
-        """Return a list of moves from the root to this node."""
+    @functools.cached_property
+    def moves(self):
+        """Return a list of moves from the root node to this node."""
+
+        # Search up in the tree until there is no parent
         moves, node = [], self
         while node.parent is not None:
             moves.append(node.move)
             node = node.parent
 
-        return list(reversed(moves))
+        # Reverse it and return
+        return tuple(reversed(moves))
+
+    @property
+    def cleared(self):
+        return self.board.cleared
 
     def prune(self):
         """Prune a node by removing it from the tree."""
@@ -723,54 +654,19 @@ class MCTSNode:
             return 1
         return sum(child.size() for child in self.children)
 
+    def search(self, shortest_path, vprint, key=None):
+        """Returns a tuple (node, path) by searching down the tree.
 
-def monte_carlo_search(
-    board: Board,
-    *,
-    iterations=1000,
-    seed=None,
-    verbosity=0,
-    shortest_path=None,
-) -> list:
-    """Monte Carlo Tree Search to find solution path.
+        By default, the UCB scores is used.
 
-    Examples
-    --------
-    >>> board = Board([[0, 0, 0, 3],
-    ...                [3, 3, 3, 2],
-    ...                [3, 2, 2, 1]])
-    >>> for moves in monte_carlo_search(board, iterations=100, seed=42):
-    ...     assert board.verify_solution(moves)
-    ...     print(f'Solution of length {len(moves)}: {moves}')
-    Solution of length 3: [(2, 3), (1, 0), (2, 1)]
-    """
+        """
 
-    def vprint(*args, v=0, **kwargs):
-        """Verbose printing function with a filter v."""
-        if verbosity >= v:
-            print(*args, **kwargs)
+        # Start at this node
+        node, path = self, [self]
 
-    shortest_path = shortest_path or float("inf")
-
-    # Yield a greedy solution, which also gives a lower bound on the solution
-    yield (greedy_solution := best_first_search(board))
-    shortest_path = min(len(greedy_solution), shortest_path)
-
-    # Root note for all iterations
-    root = MCTSNode(board.copy(), remaining_cells=board.remaining)
-
-    for iteration in range(1, iterations + 1):
-        if verbosity >= 2:
-            vprint(f"Iteration: {iteration} ({shortest_path=})", v=2)
-
-        # Start at the top of the explored tree
-        node = root
-        path = [node]
-
-        # While the current node has not been visisted, search down by UCB
+        # While the current node has not been visisted
         while node.visits > 0:
-            # If the node is solved, skip ahead to simulating it.
-            # Simulation returns no moves, so we'll yield the path to the node
+            # If the node is solved, break out and return it
             if node.board.is_solved:
                 break
 
@@ -784,7 +680,7 @@ def monte_carlo_search(
                 # Pruning condition on the root node. We cannot possibly
                 # do better, so we terminate the algorithm completely.
                 if len(path) == 1:
-                    return
+                    return None, None
 
                 node.prune()
                 path.pop()  # Remove this node from path
@@ -805,36 +701,106 @@ def monte_carlo_search(
 
                 # All children of root node were pruned, return
                 if not path:
-                    return
+                    return None, None
                 node = path[-1]  # Reset the node to parent
                 continue
 
-            # Any unvisited node will get UCB score +inf and be chosen
-            # TODO: The parameter `exploration` for UCB could be tuned
-            node = max(children)
+            # Any unvisited node will get UCB score -inf and be chosen
+            node = min(children, key=key)
             path.append(node)
 
-        # Simulate from leaf node of explored tree down to the end of the game
-        # TODO: Here `power` could be considered a hyperparameter to be tuned.
-        simulation_seed = None if seed is None else seed + iteration
-        simulation_moves = best_first_search(
-            node.board, exponent=10.0, seed=simulation_seed
+        return node, path
+
+
+def monte_carlo_search(
+    board: Board,
+    *,
+    iterations=0,
+    seed=None,
+    verbosity=0,
+    moves=None,
+    key=None,
+) -> list:
+    """Monte Carlo Tree Search to find solution path.
+
+    Examples
+    --------
+    >>> board = Board([[0, 0, 0, 3],
+    ...                [3, 3, 3, 2],
+    ...                [3, 2, 2, 1]])
+    >>> for moves in monte_carlo_search(board, iterations=100, seed=42):
+    ...     assert board.verify_solution(moves)
+    ...     print(f'Solution of length {len(moves)}: {moves}')
+    Solution of length 3: [(2, 3), (2, 1), (1, 0)]
+    """
+    key = middle_bound if key is None else key
+    shortest_path = len(moves) if moves else float("inf")
+    rng = random.Random(seed)
+
+    def vprint(*args, v=0, **kwargs):
+        """Verbose printing function with a filter v."""
+        if verbosity >= v:
+            print(*args, **kwargs)
+
+    def random_key(node, exponent=10.0):
+        """Random weighted sampling chooses element k with probability equal
+        to the weight w_k / sum_i^n w_i. This is equivalent to computing
+        Uniform(0, 1)**(1/w_i) for each i and choosing the maximal element.
+        See 'Weighted random sampling with a reservoir', Efraimidis et al."""
+        score = key(node)
+
+        # If the score is a tuple, reduce it to a number
+        if isinstance(score, tuple):
+            score = sum(s_i / 10**i for i, s_i in enumerate(score))
+
+        # No randomness
+        if exponent is None:
+            return score
+
+        # Lower is better, so set w = pow(exponent, -score). Min/max is
+        # unaffected by monotonic transformations, so we take
+        # logarithms: log[U(0, 1)**(1/w)] = 1/w * log(U) = exp(w) * log(U)
+        # Finally, we take minimum since lower is better on the output.
+        return -pow(exponent, score) * math.log(rng.random())
+        # Ad-hoc alternative: return score * math.exp(rng.gauss(0, sigma=0.05))
+
+    # Root note for all iterations
+    root = MCTSNode(board.copy(), remaining_cells=board.remaining)
+
+    # Main loop
+    iteration = 1
+    while True:
+        if iterations and iteration > iterations:
+            break
+
+        if verbosity >= 2:
+            vprint(f"Iteration: {iteration} ({shortest_path=})", v=2)
+
+        # Start at the top of the explored tree
+        node, path = root.search(
+            shortest_path=shortest_path,
+            vprint=vprint,
+            key=lambda n: (n.ucb_score(), key(n)),
         )
 
-        sim_num_cleared = node.remaining_cells
+        # Everything got pruned, so terminate the algorithm alltogether
+        if node is None:
+            return
+
+        # Simulate from leaf node of explored tree down to the end of the game
+        # The randomized moves might overestimate, so we run two simulations.
+        # simulation_moves = min(greedy_search(node.board, key=random_key),
+        #                       greedy_search(node.board, key=key), key=len)
+        simulation_moves = greedy_search(node.board, key=random_key)
         sim_num_moves = len(simulation_moves)
         vprint(
-            f" Simulation from depth {node.depth} gave path of length {sim_num_moves} (total={node.depth + sim_num_moves})",
-            v=2,
-        )
-        vprint(
-            f" Cleared per move in simulation: {sim_num_cleared / sim_num_moves:.3f}",
+            f" Sim @ depth={node.depth} gave path of length {sim_num_moves} (total={node.depth + sim_num_moves})",
             v=2,
         )
 
-        if verbosity == 1 and iteration % max((iterations // 100), 1) == 0:
+        if verbosity == 1 and iteration % max(((iterations + 1) // 100), 1) == 0:
             vprint(
-                f"Iter: {iteration} ({iteration/iterations:.1%}) (sim. @ d={node.depth}, cleared/move @ sim={sim_num_cleared / sim_num_moves:.3f}) (treesize: {root.size()}) ({shortest_path=})",
+                f"Iter: {iteration} ({iteration/iterations:.1%}) (sim. @ d={node.depth}, moves @ sim={sim_num_moves}) (treesize: {root.size()}) ({shortest_path=})",
                 v=1,
             )
 
@@ -842,63 +808,55 @@ def monte_carlo_search(
         if node.depth + sim_num_moves < shortest_path:
             shortest_path = node.depth + sim_num_moves
             vprint(
-                f"Simulation from depth {node.depth} gave new best path of length {shortest_path}",
+                f" => Sim @ depth={node.depth} gave new best path of length {shortest_path}",
                 v=1,
             )
-            yield node.construct_moves() + simulation_moves
+            yield list(node.moves) + simulation_moves
 
         # Backpropagation starting at the bottom node in the seen tree and
-        # going up to the root. If we have, from root, cleared [3, 1, 2]
-        # and simulation clears 10 in 3 moves, then the update will set scores:
-        # node #4 (leaf) : (10)             / 3
-        # node #3        : (10 + 2)         / 4
-        # node #2        : (10 + 2 + 1)     / 5
-        # node #1 (root) : (10 + 2 + 1 + 1) / 6
-        # The score at each node is average number cleared from that node.
+        # going up to the root. Scores are set to length of the path at each
+        # node (simulation path length plus distance from leaf node). Example:
+        # node #4 (leaf) : (10)
+        # node #3        : (10 + 2)
+        # node #2        : (10 + 2 + 1)
+        # node #1 (root) : (10 + 2 + 1 + 1)
         vprint(" Backpropagation (starting at bottom node and going up)", v=3)
-        cleared_in_path = 0
-        for path_num_moves, node in enumerate(reversed(path)):
-            node.visits += 1
-            score_cleared = cleared_in_path + sim_num_cleared
-            score_moves = path_num_moves + sim_num_moves
-            node.score += score_cleared / score_moves
-            vprint(f"  Updated node at depth {node.depth}", v=3)
+        for path_num_moves, path_node in enumerate(reversed(path)):
+            path_node.visits += 1
+            path_node.score += sim_num_moves + path_num_moves
             vprint(
-                f"   Cleared / move = ({cleared_in_path} + {sim_num_cleared}) / ({path_num_moves} + {sim_num_moves})",
+                f"  Updating node at depth {node.depth}: score = {sim_num_moves=} + {path_num_moves=}",
                 v=3,
             )
-            cleared_in_path += node.cleared_cells_in_move
+
+        iteration += 1
 
     # Make one final attempt to extract a solution. Follow expected
-    # return down the tree as far as possible, then best-first search
-    moves = []
-    node = root
-    while True:
-        if node.board.is_solved:
-            break
+    # return down the tree as far as possible, then use greedy search
+    def greedy_key(node):
+        # Not visisted => Do not visit these
+        if node.visits == 0:
+            return (float("inf"), key(node))
 
-        children = node.expand()
-        if any(n.visits == 0 for n in children):
-            moves.extend(best_first_search(node.board, exponent=None))
-            break
+        # If visisted, minimize UCB first, then the key
+        return (node.ucb_score(exploration=0), key(node))
 
-        # Pure exploitation strategy by following expected return
-        node = max(children, key=lambda n: n.score / n.visits)
-        moves.append(node.move)
-
-    if len(moves) < shortest_path:
-        yield moves
+    node, _ = root.search(shortest_path, vprint, key=greedy_key)
+    moves = greedy_search(node.board, key=key)
+    if len(node.moves) + len(moves) < shortest_path:
+        yield list(node.moves) + moves
 
 
 # =============================================================================
 
 
 if __name__ == "__main__":
-    pytest.main(
-        [
-            __file__,
-            "-v",
-            "--doctest-modules",
-            "-l",
-        ]
-    )
+    pytest.main([__file__, "-v", "--doctest-modules", "-l"])
+
+    if False:
+        board = Board.generate_random((9, 7), seed=0)
+
+        *_, moves = anytime_beam_search(board, power=7, verbose=True)
+
+        for moves in monte_carlo_search(board, iterations=9999, verbosity=1, seed=0):
+            print(len(moves), moves)
