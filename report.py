@@ -346,7 +346,7 @@ if __name__ == "__main__":
 
             # Start with a greedy search
             moves = greedy_search(board)
-            print("Initial bound by greedy: {len(moves)}")
+            print(f"Initial bound by greedy: {len(moves)}")
 
             print("Running beam search")
             power = 12
