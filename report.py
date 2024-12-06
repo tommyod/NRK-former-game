@@ -344,8 +344,12 @@ if __name__ == "__main__":
             board = Board(instance.board.grid)
             print(f"Board number: {board_no} (best known: {instance.best}) \n{board}")
 
+            # Start with a greedy search
+            moves = greedy_search(board)
+            print("Initial bound by greedy: {len(moves)}")
+
             print("Running beam search")
-            power = 5
+            power = 12
             st = time.perf_counter()
             results = list(search_timer(anytime_beam_search, board, power=power))
             print(f"Ran in: {time.perf_counter() - st:.2f}")
@@ -355,9 +359,17 @@ if __name__ == "__main__":
             best_moves = results[-1][1]
 
             print("Running heuristic search")
-            iterations = 500
+            iterations = 100_000
             st = time.perf_counter()
-            results = list(search_timer(heuristic_search, board, iterations=iterations))
+            results = list(
+                search_timer(
+                    heuristic_search,
+                    board,
+                    iterations=iterations,
+                    verbose=False,
+                    moves=moves,
+                )
+            )
             print(f"Ran in: {time.perf_counter() - st:.2f}")
             times = [seconds for (seconds, num_moves) in results]
             num_moves = [len(moves) for (seconds, moves) in results]
@@ -367,10 +379,16 @@ if __name__ == "__main__":
             best_moves = min([best_moves, results[-1][1]], key=len)
 
             print("Running Monte Carlo search")
-            iterations = 100
+            iterations = 100_000
             st = time.perf_counter()
             results = list(
-                search_timer(monte_carlo_search, board, iterations=iterations)
+                search_timer(
+                    monte_carlo_search,
+                    board,
+                    iterations=iterations,
+                    verbosity=0,
+                    moves=moves,
+                )
             )
             print(f"Ran in: {time.perf_counter() - st:.2f}")
             times = [seconds for (seconds, num_moves) in results]
@@ -440,7 +458,7 @@ if __name__ == "__main__":
         plt.show()
 
     # Try best-first seach with various values of `power` on a board
-    if True:
+    if False:
         plt.figure(figsize=(6, 3))
         rng = random.Random(42)
 

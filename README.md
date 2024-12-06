@@ -226,9 +226,8 @@ In the long run it produces a solution, but again we might run out of memory.
 ...    print(f"Found solution of length {len(moves)}")
 Found solution of length 24
 Found solution of length 23
-Found solution of length 22
-Found solution of length 21
 Found solution of length 20
+Found solution of length 19
 
 ```
 
