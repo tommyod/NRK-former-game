@@ -742,7 +742,7 @@ def monte_carlo_search(
         if verbosity >= v:
             print(*args, **kwargs)
 
-    def random_key(node, exponent=10.0):
+    def random_key(node, exponent=12.0):
         """Random weighted sampling chooses element k with probability equal
         to the weight w_k / sum_i^n w_i. This is equivalent to computing
         Uniform(0, 1)**(1/w_i) for each i and choosing the maximal element.
@@ -788,7 +788,7 @@ def monte_carlo_search(
             return
 
         # Simulate from leaf node of explored tree down to the end of the game
-        # The randomized moves might overestimate, so we run two simulations.
+        # The randomized moves might overestimate, so we can run two simulations.
         # simulation_moves = min(greedy_search(node.board, key=random_key),
         #                       greedy_search(node.board, key=key), key=len)
         simulation_moves = greedy_search(node.board, key=random_key)
