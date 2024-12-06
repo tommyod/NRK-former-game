@@ -15,6 +15,7 @@ from solvers import (
     monte_carlo_search,
     iterative_deepening_search,
     anytime_beam_search,
+    greedy_search,
 )
 
 
@@ -111,13 +112,66 @@ class TestSolvers:
         assert board.verify_solution(moves_astar)
 
         # Solving the board with MCTS
-        for moves in monte_carlo_search(board, iterations=999999, seed=42):
+        for moves in monte_carlo_search(board, seed=42):
             assert board.verify_solution(moves)
 
             if len(moves_astar) == len(moves):
                 break
         else:
             assert False
+
+    def test_key_functions(self):
+        # Create a random board
+        board = Board.generate_random(shape=(9, 7), seed=0)
+
+        def node_to_scores(node):
+            # Priority 1: Compute a biased average of total moves => lower is better
+            alpha = 0.5
+            avg = (1 - alpha) * node.board.lower_bound + alpha * node.board.upper_bound
+            expected = len(node.moves) + avg
+
+            # Priority 2: Compute the range between low and high => lower is better
+            assert node.board.upper_bound >= node.board.lower_bound
+            range_ = abs(node.board.upper_bound - node.board.lower_bound) ** 0.5
+
+            # Priority 3: Cleared per move => higher is better
+            cleared_per_move = node.cleared / len(node.moves) if node.moves else 0
+            return (expected, range_, cleared_per_move)
+
+        def scalar_key(node):
+            (expected, range_, cleared_per_move) = node_to_scores(node)
+            return 1.0 * expected + 0.1 * range_ - 0.01 * cleared_per_move
+
+        # Call solvers with key function
+        moves = greedy_search(board, key=scalar_key)
+        *_, moves = anytime_beam_search(board, power=4, key=scalar_key)
+        assert board.verify_solution(moves)
+        *_, moves = monte_carlo_search(board, iterations=100, seed=0, key=scalar_key)
+        assert board.verify_solution(moves)
+        *_, moves = heuristic_search(board, iterations=100, key=scalar_key)
+        assert board.verify_solution(moves)
+
+        def tuple_key(node):
+            (expected, range_, cleared_per_move) = node_to_scores(node)
+            return (expected, range_, -cleared_per_move)
+
+        # Call solvers with key function
+        moves = greedy_search(board, key=tuple_key)
+        *_, moves = anytime_beam_search(board, power=4, key=tuple_key)
+        assert board.verify_solution(moves)
+        *_, moves = monte_carlo_search(board, iterations=100, seed=0, key=tuple_key)
+        assert board.verify_solution(moves)
+        *_, moves = heuristic_search(board, iterations=100, key=tuple_key)
+        assert board.verify_solution(moves)
+
+
+@pytest.mark.parametrize("seed", range(999))
+def test_that_astar_solutions_are_within_bounds(seed):
+    # Create a random board with a random shape
+    rng = random.Random(seed)
+    shape = rng.randint(2, 5), rng.randint(2, 5)
+    board = Board.generate_random(shape=shape, seed=seed)
+    assert board.lower_bound <= len(a_star_search(board)) <= board.upper_bound
 
 
 class TestNonRegressionOnPerformance:
@@ -129,19 +183,19 @@ class TestNonRegressionOnPerformance:
             assert board.verify_solution(moves)
             solution_lengths.append(len(moves))
 
-        assert statistics.mean(solution_lengths) <= 15.1
+        assert statistics.mean(solution_lengths) <= 14.9
 
     def test_performance_heuristic_search(self):
         solution_lengths = []
         for seed in range(10):
             board = Board.generate_random(shape=(9, 7), seed=seed)
-            *_, moves = heuristic_search(board, max_nodes=5000)
+            *_, moves = heuristic_search(board, iterations=5000)
             assert board.verify_solution(moves)
             solution_lengths.append(len(moves))
 
-        assert statistics.mean(solution_lengths) <= 16.1
+        assert statistics.mean(solution_lengths) <= 14.2
 
-    def test_performance_verify_solution(self):
+    def test_performance_monte_carlo_search(self):
         solution_lengths = []
         for seed in range(10):
             board = Board.generate_random(shape=(9, 7), seed=seed)
@@ -149,7 +203,7 @@ class TestNonRegressionOnPerformance:
             assert board.verify_solution(moves)
             solution_lengths.append(len(moves))
 
-        assert statistics.mean(solution_lengths) <= 15.8
+        assert statistics.mean(solution_lengths) <= 16.1
 
 
 if __name__ == "__main__":

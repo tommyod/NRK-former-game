@@ -70,85 +70,177 @@ All children (results of all valid clicks) can be retrieved:
 
 ## The solvers
 
-**Best first search** chooses the move that clears the most cells.
-There are no guarantees that this results in an optimal solution.
+Let us try to solve the NRK board for November 25th 2024 with a few solvers:
 
 ```pycon
->>> from solvers import best_first_search
->>> board = Board([[4, 3, 3, 1, 1], 
-...                [1, 4, 4, 3, 2], 
-...                [3, 2, 4, 4, 3], 
-...                [3, 1, 4, 1, 4], 
-...                [4, 1, 2, 4, 3]])
->>> moves = best_first_search(board)
->>> moves
-[(3, 3), (1, 4), (1, 3), (1, 1), (3, 1), (4, 1), (1, 0), (2, 0), (3, 4), (3, 0)]
->>> board.verify_solution(moves)
-True
+>>> board = Board([[1, 2, 1, 2, 1, 3, 3], 
+...                [2, 1, 2, 3, 4, 2, 1], 
+...                [4, 2, 1, 2, 1, 1, 3], 
+...                [2, 4, 2, 2, 1, 2, 1], 
+...                [3, 1, 4, 2, 2, 1, 1], 
+...                [1, 1, 3, 4, 3, 2, 2], 
+...                [3, 3, 3, 2, 3, 3, 1], 
+...                [3, 1, 2, 1, 3, 2, 2], 
+...                [3, 3, 1, 2, 2, 1, 4]])
 
 ```
 
-**A\* search with an admissible heuristic** is guaranteed to solve the problem,
-but with large boards we run out of memory and the compute time is too long.
-A better heuristic could help---make a PR if you have an idea!
+### Greedy search
+
+**Greedy search** chooses the best move at each level.
+The _best move_ is defined by a key function that takes a node as input and returns a number.
+The lower the number, the better the move.
+
+Greedy search is quite flexible!
+A first heuristic we can try is to maximize cells cleared per move.
 
 ```pycon
->>> from solvers import a_star_search
->>> moves = a_star_search(board)
->>> moves
-[(2, 0), (3, 0), (4, 1), (0, 3), (3, 3), (2, 2), (3, 4), (4, 4)]
->>> board.verify_solution(moves)
-True
+>>> from solvers import greedy_search
+>>> def cleared_per_move(node):
+...     # We flip the sign because lower is better
+...     return -node.cleared / len(node.moves)
+>>> len(greedy_search(board, key=cleared_per_move))
+27
 
 ```
+
+The heuristic above looks at _what has worked so far_.
+We get better results if we look at _what will happen in the future_:
+
+```pycon
+>>> def average(node):
+...     return (node.board.lower_bound + node.board.upper_bound) / 2
+>>> len(greedy_search(board, key=average))
+17
+
+```
+
+A range on lower and upper bound like `[8, 12]` is probably better than `[6, 14]`
+even though the average is the same.
+We can break ties by adding more scores and returning a tuple:
+
+```pycon
+>>> def modified_average(node):
+...     avg = (node.board.lower_bound + node.board.upper_bound) / 2
+...     range_ = node.board.upper_bound - node.board.lower_bound
+...     cleared_per_move = node.cleared / len(node.moves)
+...     return (avg, range_, -cleared_per_move)
+>>> len(greedy_search(board, key=modified_average))
+16
+
+```
+
+Randomized search can also be expressed with a key function:
+
+```pycon
+>>> import random
+>>> rng = random.Random(0)
+>>> def random_key(node):
+...     return rng.random()
+>>> len(greedy_search(board, key=random_key))
+30
+
+```
+
+### Heuristic search
 
 **Heuristic search** uses a priority queue and yields solutions as they are discovered.
-If you let it run long enough, it will produce an optimal solution.
-You might run out of memory before that happens though.
+If we let it run long enough, it will produce an optimal solution.
+We might run out of memory before that happens though.
 
 ```pycon
 >>> from solvers import heuristic_search
->>> for moves in heuristic_search(board):
-...    print(f"Found solution of length {len(moves)}: {moves}")
-Found solution of length 10: [(3, 3), (1, 4), (1, 3), (1, 1), (3, 1), (4, 1), (1, 0), (2, 0), (3, 4), (3, 0)]
-Found solution of length 9: [(3, 3), (1, 4), (1, 3), (1, 1), (2, 0), (3, 0), (4, 1), (3, 4), (3, 0)]
-Found solution of length 8: [(3, 3), (1, 4), (1, 3), (2, 0), (3, 0), (1, 2), (4, 1), (3, 4)]
+>>> for moves in heuristic_search(board, key=cleared_per_move, iterations=999):
+...    print(f"Found solution of length {len(moves)}")
+...    assert board.verify_solution(moves)
+Found solution of length 27
+Found solution of length 22
+Found solution of length 20
+Found solution of length 18
 
 ```
 
-**Monte Carlo tree search** also yields solutions as they are discovered.
-In the long run it produces a solution, but again you might run out of memory.
+Better key functions give better results faster:
 
 ```pycon
->>> from solvers import monte_carlo_search
->>> for moves in monte_carlo_search(board, seed=1):
-...    print(f"Found solution of length {len(moves)}: {moves}")
-Found solution of length 10: [(3, 3), (1, 4), (1, 3), (1, 1), (3, 1), (4, 1), (1, 0), (2, 0), (3, 4), (3, 0)]
-Found solution of length 9: [(1, 4), (3, 3), (2, 0), (3, 0), (1, 2), (4, 1), (3, 3), (2, 4), (3, 4)]
-Found solution of length 8: [(0, 3), (3, 3), (2, 0), (3, 0), (1, 2), (4, 1), (3, 4), (4, 4)]
+>>> for moves in heuristic_search(board, key=modified_average, iterations=999):
+...    print(f"Found solution of length {len(moves)}")
+Found solution of length 16
 
 ```
+
+The solver can be given an initial solution via the `moves` argument.
+The default `key=None` uses a good key.
+
+```pycon
+
+>>> moves = greedy_search(board)
+>>> len(moves)
+19
+>>> for moves in heuristic_search(board, iterations=9999, moves=moves):
+...    print(f"Found solution of length {len(moves)}")
+...    assert board.verify_solution(moves)
+Found solution of length 15
+Found solution of length 14
+Found solution of length 13
+
+```
+
+### Beam search
 
 **Beam search** expands all children, keeps the `beam_width` best nodes, 
 expands all children of those nodes, and repeats.
 
 ```pycon
 >>> from solvers import beam_search
->>> len(beam_search(board, beam_width=2))
-9
->>> len(beam_search(board, beam_width=4))
-8
+>>> len(beam_search(board, beam_width=1, key=modified_average))
+16
+>>> len(beam_search(board, beam_width=2, key=modified_average))
+15
+>>> len(beam_search(board, beam_width=4, key=modified_average))
+14
 
 ```
 
-You can also run it for `beam_width=1, 2, 4, 8, ..., 2^power`:
+We can also run it for `beam_width=1, 2, 4, 8, ..., 2^power`:
 
 ```pycon
 >>> from solvers import anytime_beam_search
->>> for moves in anytime_beam_search(board, power=5):
-...    print(f"Found solution of length {len(moves)}: {moves}")
-Found solution of length 10: [(3, 3), (1, 4), (1, 3), (1, 1), (3, 1), (4, 1), (1, 0), (2, 0), (3, 4), (3, 0)]
-Found solution of length 9: [(2, 0), (3, 0), (4, 1), (2, 2), (3, 4), (3, 3), (3, 3), (4, 1), (4, 4)]
-Found solution of length 8: [(2, 0), (3, 0), (3, 3), (1, 2), (4, 1), (3, 4), (4, 4), (4, 3)]
+>>> for moves in anytime_beam_search(board, power=6, key=None):
+...    print(f"Found solution of length {len(moves)}")
+Found solution of length 19
+Found solution of length 16
+Found solution of length 15
+Found solution of length 14
+
+```
+
+### Monte Carlo search
+
+**Monte Carlo tree search** also yields solutions as they are discovered.
+In the long run it produces a solution, but again we might run out of memory.
+
+```pycon
+>>> from solvers import monte_carlo_search
+>>> for moves in monte_carlo_search(board, seed=1, iterations=99, key=cleared_per_move):
+...    print(f"Found solution of length {len(moves)}")
+Found solution of length 24
+Found solution of length 23
+Found solution of length 20
+Found solution of length 19
+
+```
+
+Better keys help here too, because they help tie-beak between UCB scores and
+help guide the simulation (rollout) stage. Simulations use a weighted sampling
+of key values, where weights are given by `w_i = exp(-k * key(node))`.
+
+```pycon
+>>> for moves in monte_carlo_search(board, seed=1, iterations=99, key=modified_average):
+...    print(f"Found solution of length {len(moves)}")
+Found solution of length 17
+Found solution of length 16
+Found solution of length 15
+
 
 ```

@@ -10,10 +10,11 @@ from solvers import (
     a_star_search,
     heuristic_search,
     monte_carlo_search,
-    best_first_search,
+    greedy_search,
     iterative_deepening_search,
     beam_search,
     anytime_beam_search,
+    middle_bound,
 )
 import statistics
 import matplotlib.pyplot as plt
@@ -22,6 +23,7 @@ from collections import deque
 from instances import NRK_boards
 import random
 import functools
+import math
 
 
 def yield_board_shapes():
@@ -137,23 +139,33 @@ def dfs_counter(board: Board, max_depth=1) -> int:
     return depth_counts
 
 
-def best_first_performance(board, simulations=100):
-    """Try best-first search with various powers on a board many times."""
+def randomized_greedy_performance(board, simulations=25):
+    """Try randomized greedy search on a board many times."""
+
+    def random_key(node, exponent=None):
+        """Random weighted sampling chooses element k with probability equal
+        to the weight w_k / sum_i^n w_i. This is equivalent to computing
+        Uniform(0, 1)**(1/w_i) for each i and choosing the maximal element.
+        See 'Weighted random sampling with a reservoir', Efraimidis et al."""
+        # Compute score
+        score = middle_bound(node)
+        if exponent is None:
+            return score
+
+        # Lower is better, so set w = exp(-score). Since we're maximizing and
+        # taking maximum is unaffected by monotonic transformations, we take
+        # logarithms: log[U(0, 1)**(1/w)] = 1/w * log(U) = exp(w) * log(U)
+        # Finally, we take minimum since lower is better on the output.
+        return -pow(exponent, score) * math.log(rng.random())
 
     # The lower the value of power, the more randomess
     # The higher the value of power, the more we focus on large groups of colors
-    for exponent in [1, 2, 5, 10, 25, None]:
-        if exponent is None:
-            # Pure best first search
-            moves = best_first_search(board, exponent=None, seed=None)
-            yield exponent, [len(moves)]
-            continue
-
+    for exponent in [1, 2, 5, 10, 25, 100, None]:
         results = []
         for simulation in range(simulations):
-            moves = best_first_search(board, exponent=exponent, seed=simulation)
+            key = functools.partial(random_key, exponent=exponent)
+            moves = greedy_search(board, key=key)
             results.append(len(moves))
-
         yield exponent, results
 
 
@@ -230,11 +242,21 @@ def benchmark(algorithm, *, simulations, **kwargs):
             board = LabelInvariantBoard(board.relabel().grid)
         start_time = time.perf_counter()
 
-        generator_or_list = algorithm(board, **kwargs)
+        # If "moves" is a keyword argument, provide an initial solution
+        if "moves" in algorithm.__kwdefaults__:
+            moves = greedy_search(board)
+            generator_or_list = algorithm(board, moves=moves, **kwargs)
+        else:
+            generator_or_list = algorithm(board, **kwargs)
+
+        # Extract the results
         if isinstance(generator_or_list, list):
             moves = generator_or_list
         else:
-            *_, moves = generator_or_list
+            try:
+                *_, moves = generator_or_list
+            except ValueError:  # Nothing came out from it :(
+                moves = moves
 
         times.append(time.perf_counter() - start_time)
         board.verify_solution(moves)
@@ -252,10 +274,10 @@ if __name__ == "__main__":
         benchmark = functools.partial(benchmark, simulations=10)
 
         # Parameters such that each solver takes ~15s to solve an instance
-        benchmark(best_first_search, exponent=None, seed=0)
-        benchmark(anytime_beam_search, power=9)
-        benchmark(heuristic_search, max_nodes=64_000, verbose=False)
-        benchmark(monte_carlo_search, iterations=650, seed=1)
+        benchmark(greedy_search)
+        benchmark(anytime_beam_search, power=5)
+        benchmark(heuristic_search, iterations=500, verbose=False)
+        benchmark(monte_carlo_search, iterations=50, seed=1)
 
     # Solve random boards to optimality and create a plot
     if False:
@@ -263,7 +285,7 @@ if __name__ == "__main__":
         plt.title("Solving random boards to optimality")
 
         # Set time limit and number of boards here
-        time_solver = functools.partial(time_solver, max_time=2, num_boards=5)
+        time_solver = functools.partial(time_solver, max_time=0.1, num_boards=5)
 
         solutions = list(time_solver(iterative_deepening_search))
         n = len(solutions)
@@ -299,7 +321,7 @@ if __name__ == "__main__":
     # Investigate the branching factor of a board instance
     if False:
         board = NRK_boards[26].board
-        for max_depth in range(1, 5):
+        for max_depth in range(1, 4):
             print()
             depth_counts = dfs_counter(board, max_depth=max_depth)
 
@@ -322,8 +344,12 @@ if __name__ == "__main__":
             board = Board(instance.board.grid)
             print(f"Board number: {board_no} (best known: {instance.best}) \n{board}")
 
+            # Start with a greedy search
+            moves = greedy_search(board)
+            print(f"Initial bound by greedy: {len(moves)}")
+
             print("Running beam search")
-            power = 16
+            power = 12
             st = time.perf_counter()
             results = list(search_timer(anytime_beam_search, board, power=power))
             print(f"Ran in: {time.perf_counter() - st:.2f}")
@@ -333,22 +359,36 @@ if __name__ == "__main__":
             best_moves = results[-1][1]
 
             print("Running heuristic search")
-            max_nodes = 6_000_000
+            iterations = 100_000
             st = time.perf_counter()
-            results = list(search_timer(heuristic_search, board, max_nodes=max_nodes))
+            results = list(
+                search_timer(
+                    heuristic_search,
+                    board,
+                    iterations=iterations,
+                    verbose=False,
+                    moves=moves,
+                )
+            )
             print(f"Ran in: {time.perf_counter() - st:.2f}")
             times = [seconds for (seconds, num_moves) in results]
             num_moves = [len(moves) for (seconds, moves) in results]
             plt.semilogx(
-                times, num_moves, "-o", label=f"heuristic_search({max_nodes=:.1e})"
+                times, num_moves, "-o", label=f"heuristic_search({iterations=:.1e})"
             )
             best_moves = min([best_moves, results[-1][1]], key=len)
 
-            print("Running MCTS")
-            iterations = 300_000
+            print("Running Monte Carlo search")
+            iterations = 100_000
             st = time.perf_counter()
             results = list(
-                search_timer(monte_carlo_search, board, iterations=iterations, seed=42)
+                search_timer(
+                    monte_carlo_search,
+                    board,
+                    iterations=iterations,
+                    verbosity=0,
+                    moves=moves,
+                )
             )
             print(f"Ran in: {time.perf_counter() - st:.2f}")
             times = [seconds for (seconds, num_moves) in results]
@@ -384,7 +424,7 @@ if __name__ == "__main__":
     if False:
         plt.figure(figsize=(6, 3))
         plt.title("Beam search on NRK instances")
-        MAX_POWER = 8
+        MAX_POWER = 5
 
         for board_no, instance in sorted(NRK_boards.items()):
             print(f"Beam search on board number {board_no}")
@@ -417,46 +457,18 @@ if __name__ == "__main__":
         plt.savefig("beam_search_NRK_instances.png", dpi=200)
         plt.show()
 
-    # Plot the best solution sequence - using many iterations
-    if False:
-        BOARD_NUMBER = 28
-        board = Board(NRK_boards[BOARD_NUMBER].board.grid)
-
-        *_, moves_bs = anytime_beam_search(board, power=15, verbose=True)
-
-        max_nodes = 300_000
-        *_, moves_h = heuristic_search(
-            board, max_nodes=max_nodes, verbose=True, shortest_path=len(moves_bs)
-        )
-
-        iterations = 500_000
-        *_, moves_mc = monte_carlo_search(
-            board,
-            iterations=iterations,
-            seed=42,
-            verbosity=1,
-            shortest_path=min(len(moves_bs), len(moves_h)),
-        )
-
-        moves = min([moves_mc, moves_h, moves_bs], key=len)
-        print(f"Best solution: {moves}")
-
-        fig, axes = plot_solution(board, moves)
-        plt.savefig(
-            f"best_solution_found_board_no_{BOARD_NUMBER}_manyiters.png", dpi=200
-        )
-        plt.show()
-
     # Try best-first seach with various values of `power` on a board
     if False:
         plt.figure(figsize=(6, 3))
         rng = random.Random(42)
 
         board = NRK_boards[16].board
-        plt.title(f"Best-first search on a board with shape {(board.rows, board.cols)}")
+        plt.title(f"Greedy search on a board with shape {(board.rows, board.cols)}")
+
+        rng = random.Random(0)
 
         labels = []
-        sim_results = best_first_performance(board, simulations=100)
+        sim_results = randomized_greedy_performance(board, simulations=100)
         for i, (power, results) in enumerate(sim_results):
             x = [i + (rng.random() - 0.5) * 0.33 for _ in results]
             labels.append(str(power))
@@ -473,7 +485,7 @@ if __name__ == "__main__":
                     ecolor="black",
                 )
 
-        plt.xlabel("Power")
+        plt.xlabel("Exponent")
         plt.xticks(list(range(len(labels))), labels)
         plt.ylabel("Number of moves in solution")
         plt.grid(True, ls="--", zorder=0, alpha=0.33)

@@ -112,24 +112,38 @@ Finally, all children (results of all valid clicks) can be retrieved:
     231
     <BLANKLINE>
 
-Lower and upper bounds on the number of clicks needed to solve. This board is
-constructed so that the upper bound can be achieved:
+We can use the properties `lower_bound` and `upper_bound` to get bounds on the
+solution length. The lower bound never overestimates the solution length.
+It's a consistent heuristic when used in A* search. The upper bound represents
+an upper bound on the optimal solution, but it's possible to find longer
+solution paths. This diagram explains the situation:
+
+        shortest solution path                   longest solution path
+        <------------------------------------------------------------>
+        ^
+        |
+        optimal solution
+
+<------------------------------------->
+lower bound                 upper bound
+
+
+Here is a board where the optimal solution equals the upper bound:
 
     >>> board = Board([[1, 1, 1],
-    ...               [2, 2, 2],
-    ...               [1, 1, 1],
-    ...               [2, 2, 2],
-    ...               [1, 1, 1],
-    ...               [2, 2, 2],
-    ...               [3, 1, 3],
-    ...               [1, 1, 1]])
+    ...                [2, 2, 2],
+    ...                [1, 1, 1],
+    ...                [2, 2, 2],
+    ...                [1, 1, 1],
+    ...                [2, 2, 2],
+    ...                [3, 1, 3],
+    ...                [1, 1, 1]])
     >>> board.lower_bound
     4
     >>> board.upper_bound
     9
 
-Lower and upper bounds on the number of clicks needed to solve. This board is
-constructed so that the upper bound can be achieved:
+Here is a board where the optimal solution equals the lower bound:
 
     >>> board = Board([[0, 0, 0, 3],
     ...                [0, 3, 3, 2],
@@ -139,7 +153,14 @@ constructed so that the upper bound can be achieved:
     >>> board.upper_bound
     6
 
+Here is a board where the optimal solution (which is 3) is between the bounds:
 
+    >>> board = Board([[1, 2],
+    ...                [2, 1]])
+    >>> board.lower_bound
+    2
+    >>> board.upper_bound
+    4
 """
 
 from typing import List, Tuple
@@ -395,8 +416,10 @@ class Board:
         (Board([[0, 2], [1, 2]]), 1)
         """
         outside = not (0 <= i < self.rows and 0 <= j < self.cols)
-        if outside or self.grid[i][j] == 0:
-            raise ValueError("Invalid click.")
+        if outside:
+            raise ValueError("Invalid click: {(i, j)} is outside.")
+        if self.grid[i][j] == 0:
+            raise ValueError("Invalid click: {(i, j)} is on value 0.")
 
         new_board, num_removed = self.copy()._apply_move(i, j)
         return (new_board, num_removed) if return_removed else new_board
@@ -474,7 +497,7 @@ class Board:
 
     @functools.cached_property
     def lower_bound(self):
-        """A lower bound on the number of clicks needed to solve.
+        """A lower bound on the optimal solution (minimum moves needed).
 
         The simplest lower bound is to count the unique number of non-zero
         integers. A better heuristic (this one) looks at each color in turn.
@@ -515,23 +538,40 @@ class Board:
 
     @property
     def upper_bound(self):
-        """An upper bound on the number of clicks needed to solve.
+        """An upper bound on the optimal solution (minimum moves needed).
 
         This heuristic counts the number of unique valid clicks, i.e., the
-        number of connected groups of the same color / integer. By starting
-        from the top of the board and never choosing a group that merges other
-        groups further down, we can realize this bound. In the example below,
-        this amounts to choosing 1, 2, 3 and then 4.
+        number of connected groups of the same color / integer. This seems
+        to be an upper bound on the optimal solution, but I have been unable
+        to prove it. If you can prove it, submit a PR and let me know :)
 
+        Below are two examples where it's not obvious how to attain the bound,
+        because we cannot simply start from the top. However, the bounds can
+        be attained here too.
 
         Examples
         --------
-        >>> board = Board([[1, 1, 2],
-        ...                [2, 2, 2],
-        ...                [3, 3, 4],
-        ...                [4, 4, 4]])
-        >>> board.upper_bound
+
+        The upper bound cannot be realized by an algorithm that starts at
+        the top group. Here is a counterexample:
+
+        >>> board = Board([[1, 1],
+        ...                [1, 3],
+        ...                [1, 1],
+        ...                [3, 3]])
+        >>> board.upper_bound  # Can be solved in 2 clicks
+        3
+
+        The upper bound cannot be realized by an algorithm that only makes
+        moves where the upper bound goes down by 1. Here is a counterexample:
+
+        >>> board = Board([[4, 4, 4],
+        ...                [4, 2, 1],
+        ...                [4, 4, 2]])
+        >>> board.upper_bound  # Can be solved in 3 clicks
         4
+        >>> print([child.upper_bound for _, child in board.children()])
+        [2, 4, 4, 4]
         """
         return len(self.clicks())
 
