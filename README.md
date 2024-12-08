@@ -97,6 +97,8 @@ A first heuristic we can try is to maximize cells cleared per move.
 ```pycon
 >>> from solvers import greedy_search
 >>> def cleared_per_move(node):
+...     if not node.moves:
+...         return 0
 ...     # We flip the sign because lower is better
 ...     return -node.cleared / len(node.moves)
 >>> len(greedy_search(board, key=cleared_per_move))
@@ -123,7 +125,7 @@ We can break ties by adding more scores and returning a tuple:
 >>> def modified_average(node):
 ...     avg = (node.board.lower_bound + node.board.upper_bound) / 2
 ...     range_ = node.board.upper_bound - node.board.lower_bound
-...     cleared_per_move = node.cleared / len(node.moves)
+...     cleared_per_move = node.cleared / len(node.moves) if node.moves else 0
 ...     return (avg, range_, -cleared_per_move)
 >>> len(greedy_search(board, key=modified_average))
 16

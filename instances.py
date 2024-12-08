@@ -3,6 +3,7 @@ A collection of instances.
 """
 
 import dataclasses
+
 from board import LabelInvariantBoard
 
 
@@ -15,10 +16,13 @@ class Instance:
         self.board = LabelInvariantBoard(self.grid, check=True)
 
 
-# These boards were retrieved from NRK. Each board lives for 24 hours, and the
-# keys are the dates in november 2024 that the boards were live. The "best"
-# key is the record solution within the 24 hours the board was live.
+# These boards were retrieved from NRK. Each board was online for 24 hours.
+# The "best" attribute is the record solution within the 24 hours the board
+# was live on the NRK website.
+# https://www.nrk.no/spill/former-1.17105310
 NRK_boards = {
+    # The boards below are from December 2024
+    # The keys are dates
     16: Instance(
         grid=[
             [1, 2, 2, 3, 1, 4, 4],
@@ -200,6 +204,22 @@ NRK_boards = {
             [1, 1, 2, 2, 4, 4, 4],
         ],
         best=13,
+    ),
+    # The boards below are from December 2024
+    # The keys are dates
+    7: Instance(
+        grid=[
+            [1, 1, 2, 1, 3, 2, 3],
+            [4, 2, 2, 4, 2, 2, 3],
+            [2, 4, 2, 4, 3, 3, 4],
+            [1, 3, 3, 1, 2, 3, 2],
+            [1, 4, 1, 4, 1, 2, 4],
+            [1, 3, 4, 3, 1, 1, 4],
+            [2, 4, 2, 1, 2, 2, 4],
+            [3, 1, 3, 4, 2, 4, 1],
+            [4, 1, 2, 2, 2, 2, 3],
+        ],
+        best=15,
     ),
 }
 
