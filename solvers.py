@@ -102,6 +102,7 @@ import dataclasses
 from heapq import heappush, heappop, heapify, nsmallest
 import pytest
 import random
+from collections import deque
 import itertools
 import functools
 
@@ -229,12 +230,28 @@ def breadth_first_search(board: Board) -> list:
     [(2, 3), (1, 0), (2, 1)]
     """
 
-    def path_length(node):
-        """Breadth-first-search always explores depth i before i+1."""
-        return len(node.moves)
+    # Queue of (board, moves) tuples using a deque for efficient popleft
+    queue = deque([(board.copy(), [])])
 
-    *_, moves = heuristic_search(board, key=path_length)
-    return moves
+    # Track visited states to avoid cycles
+    visited = {board.copy()}
+
+    while queue:
+        current_board, moves = queue.popleft()
+
+        # Check if we've found a solution
+        if current_board.is_solved:
+            return moves
+
+        # Try all possible moves from current state
+        for (i, j), next_board in current_board.children():
+            # Skip if we've seen this state before
+            if next_board in visited:
+                continue
+
+            # Add new state to queue and visited set
+            visited.add(next_board)
+            queue.append((next_board, moves + [(i, j)]))
 
 
 def depth_limited_search(board: Board, *, depth_limit: int) -> Optional[list]:
