@@ -276,7 +276,7 @@ if __name__ == "__main__":
         # Parameters such that each solver takes ~15s to solve an instance
         benchmark(greedy_search)
         benchmark(anytime_beam_search, power=5)
-        benchmark(heuristic_search, iterations=500, verbose=False)
+        benchmark(heuristic_search, iterations=500, verbosity=0)
         benchmark(monte_carlo_search, iterations=50, seed=1)
 
     # Solve random boards to optimality and create a plot
