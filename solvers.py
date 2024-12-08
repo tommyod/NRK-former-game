@@ -96,6 +96,7 @@ Monte Carlo search
 [(0, 0), (2, 1), (1, 0)]
 """
 
+from abc import ABC
 import math
 from typing import Optional, List, Set, Callable
 import dataclasses
@@ -108,8 +109,33 @@ import functools
 
 from board import Board
 
+from typing import TypeVar, Iterator, Optional, Callable, List, Tuple, Any, Set, Union
+from numbers import Number
 
-def middle_bound(node):
+T = TypeVar("T")
+KeyNumber = Union[int, float]
+KeyReturn = Union[KeyNumber, Tuple[KeyNumber, ...]]
+
+
+@dataclasses.dataclass(frozen=True, eq=False, order=False)
+class Node(ABC):
+    """Abstract base class defining the common interface for all node types."""
+
+    board: Board
+    moves: tuple  # Using tuple instead of list since lists aren't hashable
+    cleared: int = 0
+
+    @classmethod
+    def __subclasshook__(cls, subclass):
+        """Verify that subclasses implement the required attributes."""
+        return (
+            hasattr(subclass, "board")
+            and hasattr(subclass, "moves")
+            and hasattr(subclass, "cleared")
+        )
+
+
+def middle_bound(node: Node) -> KeyReturn:
     """Default key function. Used to prioritize nodes in various algorithms."""
 
     # Priority 1: Compute a biased average of total moves => lower is better
@@ -127,7 +153,9 @@ def middle_bound(node):
     return 1.0 * expected + 0.1 * range_ - 0.01 * cleared_per_move
 
 
-def unique_everseen(iterable, key=None):
+def unique_everseen(
+    iterable: Iterator[T], key: Optional[Callable[[T], Any]] = None
+) -> Iterator[T]:
     """
     Yield unique elements, preserving order.
 
@@ -157,14 +185,9 @@ def unique_everseen(iterable, key=None):
                 yield element
 
 
-@dataclasses.dataclass(frozen=True, eq=False, order=False)
-class Node:
-    board: Board
-    moves: tuple  # Using tuple instead of list since lists aren't hashable
-    cleared: int = 0
-
-
-def greedy_search(board: Board, *, key: Optional[Callable[Board, float]] = None):
+def greedy_search(
+    board: Board, *, key: Optional[Callable[[Node], KeyReturn]] = None
+) -> List[Tuple[int, int]]:
     """Expand all children, selects the best one and repeat.
 
     The `key` argument can be function that evalutes a node. A node has three
@@ -215,7 +238,7 @@ def greedy_search(board: Board, *, key: Optional[Callable[Board, float]] = None)
     return list(node.moves)
 
 
-def breadth_first_search(board: Board) -> list:
+def breadth_first_search(board: Board) -> List[Tuple[int, int]]:
     """Breadth-first search to find shortest solution path.
 
     This approach is not very efficient, but it is guaranteed to return
@@ -254,7 +277,9 @@ def breadth_first_search(board: Board) -> list:
             queue.append((next_board, moves + [(i, j)]))
 
 
-def depth_limited_search(board: Board, *, depth_limit: int) -> Optional[list]:
+def depth_limited_search(
+    board: Board, *, depth_limit: int
+) -> Optional[List[Tuple[int, int]]]:
     """Recursive depth-limited search implementation. Will not find the optimal
     solution unless it's length equals the depth limit.
 
@@ -278,7 +303,9 @@ def depth_limited_search(board: Board, *, depth_limit: int) -> Optional[list]:
     [(2, 3), (1, 0), (2, 1)]
     """
 
-    def dfs(board: Board, depth: int, moves: list) -> Optional[list]:
+    def dfs(
+        board: Board, depth: int, moves: List[Tuple[int, int]]
+    ) -> Optional[List[Tuple[int, int]]]:
         if board.is_solved:
             return moves
 
@@ -292,7 +319,7 @@ def depth_limited_search(board: Board, *, depth_limit: int) -> Optional[list]:
     return dfs(board.copy(), 0, [])
 
 
-def iterative_deepening_search(board: Board) -> list:
+def iterative_deepening_search(board: Board) -> List[Tuple[int, int]]:
     """Iterative deepening depth limited search to find shortest solution path.
 
     Examples
@@ -311,9 +338,28 @@ def iterative_deepening_search(board: Board) -> list:
 
 
 # =============================================================================
+class AStarNode(Node):
+    def evaluate(self):
+        if not self.moves:
+            return (0, 0)
+
+        # The first heuristic must be admissible: depth + lower_bound
+        # The remaining heuristics need not be. They can be whatever helps
+        # and is fast to compute. Some options are:
+        #  - upper_bound: moves + self.board.upper_bound
+        #  - cleared_per_move: -(self.board.cleared / moves)
+        #  - moves: -len(self.moves)
+        # Testing experimentally, I found that this works the best:
+        moves = len(self.moves)
+        lower_bound = moves + self.board.lower_bound
+        return (lower_bound, -moves)
+
+    # Make nodes comparable using the key
+    def __lt__(self, other):
+        return self.evaluate() < other.evaluate()
 
 
-def a_star_search(board: Board) -> list:
+def a_star_search(board: Board) -> List[Tuple[int, int]]:
     """A star search with a consistent heuristic. Guaranteed to find the
     optimal solution.
 
@@ -327,26 +373,6 @@ def a_star_search(board: Board) -> list:
     >>> moves
     [(0, 0), (2, 1), (1, 0)]
     """
-
-    class AStarNode(Node):
-        def evaluate(self):
-            if not self.moves:
-                return (0, 0)
-
-            # The first heuristic must be admissible: depth + lower_bound
-            # The remaining heuristics need not be. They can be whatever helps
-            # and is fast to compute. Some options are:
-            #  - upper_bound: moves + self.board.upper_bound
-            #  - cleared_per_move: -(self.board.cleared / moves)
-            #  - moves: -len(self.moves)
-            # Testing experimentally, I found that this works the best:
-            moves = len(self.moves)
-            lower_bound = moves + self.board.lower_bound
-            return (lower_bound, -moves)
-
-        # Make nodes comparable using the key
-        def __lt__(self, other):
-            return self.evaluate() < other.evaluate()
 
     # Set up the heap and `depths[board] -> shortest path seen`
     heap = [AStarNode(board.copy(), moves=(), cleared=board.cleared)]
@@ -398,8 +424,12 @@ class BeamNode(Node):
 
 
 def beam_search(
-    board: Board, *, beam_width: int = 3, shortest_path=None, key=None
-) -> list:
+    board: Board,
+    *,
+    beam_width: int = 3,
+    shortest_path: Optional[int] = None,
+    key: Optional[Callable[[Node], KeyReturn]] = None,
+) -> List[Tuple[int, int]]:
     """Beam search with specified beam width.
 
     Maintains only the top beam_width nodes at each depth level.
@@ -453,7 +483,13 @@ def beam_search(
         beam = nsmallest(n=beam_width, iterable=next_beam, key=key)
 
 
-def anytime_beam_search(board, *, power: int = 1, key=None, verbose: bool = False):
+def anytime_beam_search(
+    board: Board,
+    *,
+    power: Optional[int] = 1,
+    key: Optional[Callable[[Node], KeyReturn]] = None,
+    verbose: bool = False,
+) -> Iterator[List[Tuple[int, int]]]:
     """Run beam search with width=1,2,4,8,...,2**power, yielding solutions.
     If power is None, then power will be increased until no improvement occurs
     for 3 iterations.
@@ -514,7 +550,14 @@ def anytime_beam_search(board, *, power: int = 1, key=None, verbose: bool = Fals
 # =============================================================================
 
 
-def heuristic_search(board: Board, *, iterations=0, moves=None, key=None, verbosity=0):
+def heuristic_search(
+    board: Board,
+    *,
+    iterations: int = 0,
+    moves: Optional[List[Tuple[int, int]]] = None,
+    key: Optional[Callable[[Node], KeyReturn]] = None,
+    verbosity: int = 0,
+) -> Iterator[List[Tuple[int, int]]]:
     """A branch-and-bound search guided by a heuristic function `key`.
 
     If run long enough, then this function will eventually find the optimal
@@ -853,12 +896,12 @@ class MCTSNode:
 def monte_carlo_search(
     board: Board,
     *,
-    iterations=0,
-    seed=None,
-    verbosity=0,
-    moves=None,
-    key=None,
-) -> list:
+    iterations: int = 0,
+    seed: Optional[int] = None,
+    verbosity: int = 0,
+    moves: Optional[List[Tuple[int, int]]] = None,
+    key: Optional[Callable[[Node], KeyReturn]] = None,
+) -> Iterator[List[Tuple[int, int]]]:
     """Monte Carlo Tree Search to find solution path.
 
     Examples
