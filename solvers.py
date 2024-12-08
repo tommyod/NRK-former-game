@@ -469,9 +469,7 @@ def anytime_beam_search(board, *, power: int = 1, key=None, verbose: bool = Fals
 # =============================================================================
 
 
-def heuristic_search(
-    board: Board, *, iterations=0, moves=None, key=None, verbose=False
-):
+def heuristic_search(board: Board, *, iterations=0, moves=None, key=None, verbosity=0):
     """A heuristic search that yields solutions as they are found.
 
     If run long enough, then this function will eventually find the optimal
@@ -491,15 +489,28 @@ def heuristic_search(
     key = middle_bound if key is None else key
     shortest_path = len(moves) if moves else float("inf")
 
+    def vprint(*args, v=0, **kwargs):
+        """Verbose printing function with a filter v."""
+        if verbosity >= v:
+            print(*args, **kwargs)
+
     class HeuristicNode(Node):
         def __lt__(self, other):
             return key(self) < key(other)
 
+    def rollout_key(node):
+        # This key is used for the "rollout phase", triggered when:
+        #  depth + current.board.upper_bound < shortest_path
+        return (node.board.upper_bound, node.board.lower_bound)
+
     def prune(heap, num_moves, shortest_path):
         """Prune nodes that will lead nowhere."""
 
+        vprint(f"  PRUNE HEAP BEFORE: {len(heap)=} {len(num_moves)=}", v=1)
+
         # Filter the heap
         def should_be_kept(node):
+            # These nodes could potentially lead to a better solution
             return len(node.moves) + node.board.lower_bound < shortest_path
 
         heap = list(filter(should_be_kept, heap))
@@ -508,6 +519,7 @@ def heuristic_search(
         # Filter the scores
         boards = set(n.board for n in heap)
         num_moves = {b: v for (b, v) in num_moves.items() if b in boards}
+        vprint(f"  PRUNE HEAP AFTER: {len(heap)=} {len(num_moves)=}", v=1)
         return heap, num_moves
 
     # Add the board to the heap
@@ -525,51 +537,86 @@ def heuristic_search(
         depth = len(current.moves)  # g(node) = number of moves
         popped_counter += 1
 
-        if popped_counter % max((iterations // 100), 1) == 0 and verbose:
-            msg = f"""Nodes popped:{popped_counter:_}  Iterations:{iterations:_}  Shortest path:{shortest_path}
- Heuristic function value:{key(current):.2f}
- Depth:{depth}  Bounds:[{depth + current.board.lower_bound}, {depth + current.board.upper_bound}] 
- In queue:{len(heap):_}  Seen:{len(num_moves):_}"""
+        perc_iteration = (
+            popped_counter % (max((iterations // 100), 1) if iterations else 10_000)
+            == 0
+        )
+
+        if (perc_iteration and verbosity in (1, 2)) or verbosity > 2:
+            msg = f"""Nodes popped:{popped_counter:,}  Iterations:{popped_counter:,}
+Shortest path:{shortest_path:,}  Heuristic function value:{key(current)}
+ Depth:{depth}  Bounds on node:[{depth + current.board.lower_bound}, {depth + current.board.upper_bound}] 
+ In queue:{len(heap):,}  Seen:{len(num_moves):,}"""
             print(msg)
 
-        # The lower bound f(n) = g(n) + h(n) >= best we've seen, so skip it
-        if depth + current.board.lower_bound >= shortest_path:
-            continue
-
-        # The path to current node is longer than what we've seen, so skip it
+        # PRUNING CONDITION 1: We've already seen a shorter path to this node
         if depth > num_moves[current.board]:
+            vprint(f"  PRUNE: Shorter path to node seen before (d={depth})", v=2)
             continue
 
-        # The board is solved. If the path is shorter than what we have,
-        # then yield it and update the lower bound.
-        if current.board.is_solved and len(current.moves) < shortest_path:
-            yield list(current.moves)
-            shortest_path = len(current.moves)
-            heap, num_moves = prune(heap, num_moves, shortest_path)
+        # PRUNING CONDITION 2: Shortest path is lower than what we can achieve
+        if shortest_path < depth + current.board.lower_bound:
+            vprint(f"  PRUNE: Shortest path lower than node bound (d={depth})", v=2)
+            continue
 
-        # The upper bound on this node is lower than what we have seen,
-        # so we attempt to attain the bound immediately
+        assert depth == num_moves[current.board]
+
+        # YIELD CONDITION 1: The board is solved. If the path is shorter than
+        # the shorest path we've seen then yield it and update the lower bound.
+        if current.board.is_solved and depth < shortest_path:
+            vprint(f"  SOLVED: Reached leaf node in {len(current.moves)} moves", v=1)
+            yield list(current.moves)
+            shortest_path = depth
+            heap, num_moves = prune(heap, num_moves, shortest_path)
+            continue  # Solved board, so nothing more to do
+
+        # YIELD CONDITION 2: The maximal number of moves needed to solve this
+        # board is lower than what we have seen, so we attempt to attain the
+        # bound immediately. We still add children afterwards, since the
+        # heuristic solution obtained here is not guaranteed to be optimal.
         if depth + current.board.upper_bound < shortest_path:
-            moves = greedy_search(current.board, key=key)
-            if len(moves) < current.board.upper_bound:
-                yield list(current.moves) + moves
-                shortest_path = len(current.moves) + len(moves)
-                heap, num_moves = prune(heap, num_moves, shortest_path)
+            # Assume that a greedy search that minimizes the upper bound always
+            # achieves the upper bound or lower. This is unproved, but works.
+            moves_rollout = greedy_search(current.board, key=rollout_key)
+            assert len(moves_rollout) <= current.board.upper_bound
+            # It could be that using the provided strategy is better, so try it
+            moves_greedy = greedy_search(current.board, key=key)
+            moves = min(moves_rollout, moves_greedy, key=len)
+            assert len(moves) <= current.board.upper_bound, "Bound must improve"
+            vprint(f"  ROLLOUT: Solved node in {len(moves)} moves", v=1)
+
+            yield list(current.moves) + moves
+            shortest_path = depth + len(moves)
+            heap, num_moves = prune(heap, num_moves, shortest_path)
 
         # Go through all children, created by applying a single move
         children = current.board.children(return_removed=True)
         for (i, j), child_board, num_removed in children:
-            g = depth + 1  # One more move is needed to reach the child
+            c_depth = depth + 1  # One more move is needed to reach the child
 
-            # If not seen before, or the path is lower than recorded
-            if (child_board not in num_moves) or (g < num_moves[child_board]):
-                num_moves[child_board] = g
-                next_node = HeuristicNode(
-                    board=child_board,
-                    moves=current.moves + ((i, j),),
-                    cleared=current.cleared + num_removed,
-                )
-                heappush(heap, next_node)
+            # If seen and the path is not better, then skip it
+            # Test this first to possibly skip evaluating 'lower_bound' below
+            if (child_board in num_moves) and (c_depth >= num_moves[child_board]):
+                vprint("  PRUNE: Child seen before with fewer moves", v=3)
+                continue
+
+            # If the child not cannot improve the shorest path, then skip it
+            if shortest_path < c_depth + child_board.lower_bound:
+                vprint("  PRUNE: Child cannot improve shortest path", v=3)
+                continue
+
+            # Update num_moves here. We never end up a situation where
+            # depth < num_moves[current.board] when we pop. We could still end
+            # up adding B1 with 5 moves (unseen) and B1 with 4 (better) to the
+            # priority queue, but then num_moves[B1] = 4, and when we pop the
+            # node with the long path of 5 it will be pruned.
+            num_moves[child_board] = c_depth
+            next_node = HeuristicNode(
+                board=child_board,
+                moves=current.moves + ((i, j),),
+                cleared=current.cleared + num_removed,
+            )
+            heappush(heap, next_node)
 
 
 # =============================================================================
