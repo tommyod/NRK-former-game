@@ -168,6 +168,7 @@ The default `key=None` uses a good key.
 >>> for moves in heuristic_search(board, iterations=9999, moves=moves):
 ...    print(f"Found solution of length {len(moves)}")
 ...    assert board.verify_solution(moves)
+Found solution of length 16
 Found solution of length 15
 Found solution of length 14
 Found solution of length 13

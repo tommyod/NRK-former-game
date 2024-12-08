@@ -78,7 +78,7 @@ Heuristic search
 ...                [3, 1, 1, 3]])
 >>> for moves in heuristic_search(board):
 ...     print(moves)
-[(1, 2), (0, 1), (2, 0), (4, 0), (3, 3)]
+[(1, 2), (0, 1), (2, 0), (3, 3), (4, 0)]
 >>> len(moves) == len(a_star_search(board))
 True
 
@@ -94,16 +94,6 @@ Monte Carlo search
 >>> for moves in solutions:
 ...     print(moves)
 [(0, 0), (2, 1), (1, 0)]
->>> board = Board([[1, 4, 4, 3],
-...                [3, 4, 2, 2],
-...                [4, 4, 2, 4],
-...                [3, 4, 2, 2],
-...                [3, 1, 1, 3]])
->>> for moves in heuristic_search(board):
-...     print(moves)
-[(1, 2), (0, 1), (2, 0), (4, 0), (3, 3)]
->>> len(moves) == len(a_star_search(board))
-True
 """
 
 import math
@@ -470,11 +460,29 @@ def anytime_beam_search(board, *, power: int = 1, key=None, verbose: bool = Fals
 
 
 def heuristic_search(board: Board, *, iterations=0, moves=None, key=None, verbosity=0):
-    """A heuristic search that yields solutions as they are found.
+    """A branch-and-bound search guided by a heuristic function `key`.
 
     If run long enough, then this function will eventually find the optimal
     path. The optimal path will be the last path it yields, but as it
-    searches the graph it will yield the best paths found so far.
+    searches it yields newer and better paths as they are found.
+
+    Heuristic search uses lower and upper bounds on each node to prune the
+    search, as well as strategic dives to improve the global lower bound.
+
+    Parameters
+    ----------
+    iterations : int, optional
+        Max number of nodes to pop from priority queue. The default is 0 (inf).
+    moves : list, optional
+        An initial best known path [(i, j), ...]. The default is None.
+    key : callable, optional
+        A functiont that takes a node as input and returns a score. Scores are
+        computed and by convention lower scores are better. A node has attrs
+        `board`, `moves` (list) and `cleared` (int). The score can return a
+        number of a tuple, or anything else that can be compared with <.
+        The default is None.
+    verbosity : int, optional
+        How much information to print. The default is 0.
 
     Examples
     --------
@@ -486,6 +494,7 @@ def heuristic_search(board: Board, *, iterations=0, moves=None, key=None, verbos
     ...     print(f'Solution of length {len(moves)}: {moves}')
     Solution of length 3: [(2, 3), (1, 0), (2, 1)]
     """
+    assert isinstance(iterations, int)
     key = middle_bound if key is None else key
     shortest_path = len(moves) if moves else float("inf")
 
@@ -495,6 +504,7 @@ def heuristic_search(board: Board, *, iterations=0, moves=None, key=None, verbos
             print(*args, **kwargs)
 
     class HeuristicNode(Node):
+        # Make nodes comparable using the key
         def __lt__(self, other):
             return key(self) < key(other)
 
@@ -503,9 +513,13 @@ def heuristic_search(board: Board, *, iterations=0, moves=None, key=None, verbos
         #  depth + current.board.upper_bound < shortest_path
         return (node.board.upper_bound, node.board.lower_bound)
 
-    def prune(heap, num_moves, shortest_path):
-        """Prune nodes that will lead nowhere."""
+    def expected_key(node):
+        # Expected number of moves to a solution
+        avg = (node.board.lower_bound + node.board.upper_bound) / 2
+        return len(node.moves) + avg
 
+    def prune(heap, num_moves, shortest_path):
+        # Prune nodes that cannot possibly improve on the shortest path found
         vprint(f"  PRUNE HEAP BEFORE: {len(heap)=} {len(num_moves)=}", v=1)
 
         # Filter the heap
@@ -519,12 +533,14 @@ def heuristic_search(board: Board, *, iterations=0, moves=None, key=None, verbos
         # Filter the scores
         boards = set(n.board for n in heap)
         num_moves = {b: v for (b, v) in num_moves.items() if b in boards}
+
         vprint(f"  PRUNE HEAP AFTER: {len(heap)=} {len(num_moves)=}", v=1)
         return heap, num_moves
 
     # Add the board to the heap
     heap = [HeuristicNode(board.copy(), moves=(), cleared=board.cleared)]
     num_moves = {board: 0}  # Keep track of nodes seen and number of moves
+    lowest_expected = expected_key(heap[0])  # Lowest expected path length seen
 
     popped_counter = 0
     while heap:
@@ -555,7 +571,7 @@ Shortest path:{shortest_path:,}  Heuristic function value:{key(current)}
             continue
 
         # PRUNING CONDITION 2: Shortest path is lower than what we can achieve
-        if shortest_path < depth + current.board.lower_bound:
+        if depth + current.board.lower_bound >= shortest_path:
             vprint(f"  PRUNE: Shortest path lower than node bound (d={depth})", v=2)
             continue
 
@@ -574,7 +590,7 @@ Shortest path:{shortest_path:,}  Heuristic function value:{key(current)}
         # board is lower than what we have seen, so we attempt to attain the
         # bound immediately. We still add children afterwards, since the
         # heuristic solution obtained here is not guaranteed to be optimal.
-        if depth + current.board.upper_bound < shortest_path:
+        elif depth + current.board.upper_bound < shortest_path:
             # Assume that a greedy search that minimizes the upper bound always
             # achieves the upper bound or lower. This is unproved, but works.
             moves_rollout = greedy_search(current.board, key=rollout_key)
@@ -583,11 +599,31 @@ Shortest path:{shortest_path:,}  Heuristic function value:{key(current)}
             moves_greedy = greedy_search(current.board, key=key)
             moves = min(moves_rollout, moves_greedy, key=len)
             assert len(moves) <= current.board.upper_bound, "Bound must improve"
-            vprint(f"  ROLLOUT: Solved node in {len(moves)} moves", v=1)
+            vprint(f"  DIVE: Solved node in {len(moves)} moves", v=1)
 
             yield list(current.moves) + moves
             shortest_path = depth + len(moves)
             heap, num_moves = prune(heap, num_moves, shortest_path)
+
+        # YIELD CONDITION 3: The expected number of moves is low, perform a dive
+        elif expected_key(current) < lowest_expected:
+            vprint(
+                f"  DIVE ATTEMPT: expected={expected_key(current)} < {lowest_expected=}",
+                v=1,
+            )
+            lowest_expected = expected_key(current)
+            moves_rollout = greedy_search(current.board, key=rollout_key)
+            moves_greedy = greedy_search(current.board, key=key)
+            moves = min(moves_rollout, moves_greedy, key=len)
+
+            # If the solution is better, update and prune
+            if depth + len(moves) < shortest_path:
+                vprint(
+                    f"  DIVE ATTEMPT SUCCESS: Solved node in {len(moves)} moves", v=1
+                )
+                yield list(current.moves) + moves
+                shortest_path = depth + len(moves)
+                heap, num_moves = prune(heap, num_moves, shortest_path)
 
         # Go through all children, created by applying a single move
         children = current.board.children(return_removed=True)
@@ -601,7 +637,7 @@ Shortest path:{shortest_path:,}  Heuristic function value:{key(current)}
                 continue
 
             # If the child not cannot improve the shorest path, then skip it
-            if shortest_path < c_depth + child_board.lower_bound:
+            if c_depth + child_board.lower_bound >= shortest_path:
                 vprint("  PRUNE: Child cannot improve shortest path", v=3)
                 continue
 
