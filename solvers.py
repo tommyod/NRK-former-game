@@ -102,6 +102,7 @@ import dataclasses
 from heapq import heappush, heappop, heapify, nsmallest
 import pytest
 import random
+from collections import deque
 import itertools
 import functools
 
@@ -229,12 +230,28 @@ def breadth_first_search(board: Board) -> list:
     [(2, 3), (1, 0), (2, 1)]
     """
 
-    def path_length(node):
-        """Breadth-first-search always explores depth i before i+1."""
-        return len(node.moves)
+    # Queue of (board, moves) tuples using a deque for efficient popleft
+    queue = deque([(board.copy(), [])])
 
-    *_, moves = heuristic_search(board, key=path_length)
-    return moves
+    # Track visited states to avoid cycles
+    visited = {board.copy()}
+
+    while queue:
+        current_board, moves = queue.popleft()
+
+        # Check if we've found a solution
+        if current_board.is_solved:
+            return moves
+
+        # Try all possible moves from current state
+        for (i, j), next_board in current_board.children():
+            # Skip if we've seen this state before
+            if next_board in visited:
+                continue
+
+            # Add new state to queue and visited set
+            visited.add(next_board)
+            queue.append((next_board, moves + [(i, j)]))
 
 
 def depth_limited_search(board: Board, *, depth_limit: int) -> Optional[list]:
@@ -311,20 +328,58 @@ def a_star_search(board: Board) -> list:
     [(0, 0), (2, 1), (1, 0)]
     """
 
-    def admissible_heuristic(node):
-        """Admissible heurisic used for A*"""
-        if not node.moves:
-            return 0
-        # Return (admissible_heuristic(), non_admissible(), non_admissible())
-        # The overall result is still admissible, but the second and third
-        # component of the tuple act as tie-breakers
-        lower_bound = len(node.moves) + node.board.lower_bound
-        upper_bound = len(node.moves) + node.board.upper_bound
-        cleared_per_move = node.board.cleared / len(node.moves)
-        return (lower_bound, upper_bound, -cleared_per_move)
+    class AStarNode(Node):
+        def evaluate(self):
+            if not self.moves:
+                return (0, 0)
 
-    *_, moves = heuristic_search(board, key=admissible_heuristic)
-    return moves
+            # The first heuristic must be admissible: depth + lower_bound
+            # The remaining heuristics need not be. They can be whatever helps
+            # and is fast to compute. Some options are:
+            #  - upper_bound: moves + self.board.upper_bound
+            #  - cleared_per_move: -(self.board.cleared / moves)
+            #  - moves: -len(self.moves)
+            # Testing experimentally, I found that this works the best:
+            moves = len(self.moves)
+            lower_bound = moves + self.board.lower_bound
+            return (lower_bound, -moves)
+
+        # Make nodes comparable using the key
+        def __lt__(self, other):
+            return self.evaluate() < other.evaluate()
+
+    # Set up the heap and `depths[board] -> shortest path seen`
+    heap = [AStarNode(board.copy(), moves=(), cleared=board.cleared)]
+    depths = {board.copy(): 0}  # Keep track of nodes seen and number of moves
+
+    while heap:
+        # Pop the smallest item from the heap
+        current = heappop(heap)
+        depth = len(current.moves)
+
+        # The path to current node is larger than what we've seen, so skip it
+        if depth > depths[current.board]:
+            continue
+
+        # The board is solved, return the list of moves
+        if current.board.is_solved:
+            return list(current.moves)
+
+        # Go through all children, created by applying a single move
+        children = current.board.children(return_removed=True)
+        for (i, j), c_board, num_removed in children:
+            # Increment by one, since we need to make one more move to get here
+            c_depth = depth + 1
+
+            # If not seen before, or the path is lower than recorded
+            if (c_board not in depths) or (c_depth < depths[c_board]):
+                depths[c_board] = c_depth
+                c_node = AStarNode(
+                    c_board,
+                    moves=current.moves + ((i, j),),
+                    cleared=current.cleared + num_removed,
+                )
+                heappush(heap, c_node)
 
 
 # =============================================================================
