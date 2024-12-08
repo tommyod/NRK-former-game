@@ -604,7 +604,7 @@ def heuristic_search(
         def __lt__(self, other):
             return key(self) < key(other)
 
-    def rollout_key(node):
+    def dive_key(node):
         # This key is used for the "rollout phase", triggered when:
         #  depth + current.board.upper_bound < shortest_path
         return (node.board.upper_bound, node.board.lower_bound)
@@ -613,6 +613,14 @@ def heuristic_search(
         # Expected number of moves to a solution
         avg = (node.board.lower_bound + node.board.upper_bound) / 2
         return len(node.moves) + avg
+
+    def dive(node):
+        # Perform a dive from this node, return the solution path from the node
+        moves_rollout = greedy_search(node.board, key=dive_key)
+        assert len(moves_rollout) <= node.board.upper_bound
+        # It could be that using the provided strategy is better, so try it
+        moves_greedy = greedy_search(node.board, key=key)
+        return min(moves_rollout, moves_greedy, key=len)
 
     def prune(heap, num_moves, shortest_path):
         # Prune nodes that cannot possibly improve on the shortest path found
@@ -637,6 +645,7 @@ def heuristic_search(
     heap = [HeuristicNode(board.copy(), moves=(), cleared=board.cleared)]
     num_moves = {board: 0}  # Keep track of nodes seen and number of moves
     lowest_expected = expected_key(heap[0])  # Lowest expected path length seen
+    lowest_key = key(heap[0])
 
     popped_counter = 0
     while heap:
@@ -689,11 +698,7 @@ Shortest path:{shortest_path:,}  Heuristic function value:{key(current)}
         elif depth + current.board.upper_bound < shortest_path:
             # Assume that a greedy search that minimizes the upper bound always
             # achieves the upper bound or lower. This is unproved, but works.
-            moves_rollout = greedy_search(current.board, key=rollout_key)
-            assert len(moves_rollout) <= current.board.upper_bound
-            # It could be that using the provided strategy is better, so try it
-            moves_greedy = greedy_search(current.board, key=key)
-            moves = min(moves_rollout, moves_greedy, key=len)
+            moves = dive(current)
             assert len(moves) <= current.board.upper_bound, "Bound must improve"
             vprint(f"  DIVE: Solved node in {len(moves)} moves", v=1)
 
@@ -708,10 +713,23 @@ Shortest path:{shortest_path:,}  Heuristic function value:{key(current)}
                 v=1,
             )
             lowest_expected = expected_key(current)
-            moves_rollout = greedy_search(current.board, key=rollout_key)
-            moves_greedy = greedy_search(current.board, key=key)
-            moves = min(moves_rollout, moves_greedy, key=len)
+            moves = dive(current)
 
+            # If the solution is better, update and prune
+            if depth + len(moves) < shortest_path:
+                vprint(
+                    f"  DIVE ATTEMPT SUCCESS: Solved node in {len(moves)} moves", v=1
+                )
+                yield list(current.moves) + moves
+                shortest_path = depth + len(moves)
+                heap, num_moves = prune(heap, num_moves, shortest_path)
+        elif key(current) < lowest_key:
+            vprint(
+                f"  DIVE ATTEMPT: key ({key(current)}) lower than seen ({lowest_key})",
+                v=1,
+            )
+            lowest_key = key(current)
+            moves = dive(current)
             # If the solution is better, update and prune
             if depth + len(moves) < shortest_path:
                 vprint(
