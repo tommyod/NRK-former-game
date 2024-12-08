@@ -150,21 +150,9 @@ We might run out of memory before that happens though.
 
 ```pycon
 >>> from solvers import heuristic_search
->>> for moves in heuristic_search(board, key=cleared_per_move, iterations=999):
-...    print(f"Found solution of length {len(moves)}")
-...    assert board.verify_solution(moves)
-Found solution of length 27
-Found solution of length 22
-Found solution of length 20
-Found solution of length 18
-
-```
-
-Better key functions give better results faster:
-
-```pycon
 >>> for moves in heuristic_search(board, key=modified_average, iterations=999):
 ...    print(f"Found solution of length {len(moves)}")
+...    assert board.verify_solution(moves)
 Found solution of length 16
 
 ```
