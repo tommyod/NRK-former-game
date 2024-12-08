@@ -96,21 +96,19 @@ Monte Carlo search
 [(0, 0), (2, 1), (1, 0)]
 """
 
-from abc import ABC
-import math
-from typing import Optional, List, Set, Callable
 import dataclasses
-from heapq import heappush, heappop, heapify, nsmallest
-import pytest
-import random
-from collections import deque
-import itertools
 import functools
+import itertools
+import math
+import random
+from abc import ABC
+from collections import deque
+from heapq import heapify, heappop, heappush, nsmallest
+from typing import Any, Callable, Iterator, List, Optional, Set, Tuple, TypeVar, Union
+
+import pytest
 
 from board import Board
-
-from typing import TypeVar, Iterator, Optional, Callable, List, Tuple, Any, Set, Union
-from numbers import Number
 
 T = TypeVar("T")
 KeyNumber = Union[int, float]
