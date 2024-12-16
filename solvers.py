@@ -138,12 +138,12 @@ def middle_bound(node: Node) -> KeyReturn:
 
     # Priority 1: Compute a biased average of total moves => lower is better
     alpha = 0.3  # Experiments show that 0.3 is a good value
-    avg = (1 - alpha) * node.board.lower_bound + alpha * node.board.upper_bound
+    avg = (1 - alpha) * node.board.lower_bound + alpha * node.board.num_moves
     expected = len(node.moves) + avg
 
     # Priority 2: Compute the range between low and high => lower is better
-    assert node.board.upper_bound >= node.board.lower_bound
-    range_ = abs(node.board.upper_bound - node.board.lower_bound) ** 0.5
+    assert node.board.num_moves >= node.board.lower_bound
+    range_ = abs(node.board.num_moves - node.board.lower_bound) ** 0.5
 
     # Priority 3: Cleared per move => higher is better
     cleared_per_move = node.cleared / len(node.moves) if node.moves else 0
@@ -344,7 +344,7 @@ class AStarNode(Node):
         # The first heuristic must be admissible: depth + lower_bound
         # The remaining heuristics need not be. They can be whatever helps
         # and is fast to compute. Some options are:
-        #  - upper_bound: moves + self.board.upper_bound
+        #  - num_moves: moves + self.board.num_moves
         #  - cleared_per_move: -(self.board.cleared / moves)
         #  - moves: -len(self.moves)
         # Testing experimentally, I found that this works the best:
@@ -666,7 +666,7 @@ def heuristic_search(
         if (perc_iteration and verbosity in (1, 2)) or verbosity > 2:
             msg = f"""Nodes popped:{popped_counter:,}  Iterations:{popped_counter:,}
 Shortest path:{shortest_path:,}  Heuristic function value:{key(current)}
- Depth:{depth}  Bounds on node:[{depth + current.board.lower_bound}, {depth + current.board.upper_bound}] 
+ Depth:{depth}  Bounds on node:[{depth + current.board.lower_bound}, None] 
  In queue:{len(heap):,}  Seen:{len(num_moves):,}"""
             print(msg)
 
@@ -691,20 +691,25 @@ Shortest path:{shortest_path:,}  Heuristic function value:{key(current)}
             heap, num_moves = prune(heap, num_moves, shortest_path)
             continue  # Solved board, so nothing more to do
 
-        # YIELD CONDITION 2: The maximal number of moves needed to solve this
-        # board is lower than what we have seen, so we attempt to attain the
-        # bound immediately. We still add children afterwards, since the
+        # YIELD CONDITION 2: The approximate maximal number of moves needed to
+        # solve this board is lower than what we have seen, so we attempt to
+        # attain the bound. We still add children afterwards, since the
         # heuristic solution obtained here is not guaranteed to be optimal.
-        elif depth + current.board.upper_bound < shortest_path:
-            # Assume that a greedy search that minimizes the upper bound always
-            # achieves the upper bound or lower. This is unproved, but works.
+        elif depth + current.board.num_moves < shortest_path:
+            vprint(
+                f"  DIVE ATTEMPT: approx upper={depth + current.board.num_moves} < {shortest_path=}",
+                v=1,
+            )
             moves = dive(current)
-            assert len(moves) <= current.board.upper_bound, "Bound must improve"
-            vprint(f"  DIVE: Solved node in {len(moves)} moves", v=1)
 
-            yield list(current.moves) + moves
-            shortest_path = depth + len(moves)
-            heap, num_moves = prune(heap, num_moves, shortest_path)
+            # If the solution is better, update and prune
+            if depth + len(moves) < shortest_path:
+                vprint(
+                    f"  DIVE ATTEMPT SUCCESS: Solved node in {len(moves)} moves", v=1
+                )
+                yield list(current.moves) + moves
+                shortest_path = depth + len(moves)
+                heap, num_moves = prune(heap, num_moves, shortest_path)
 
         # YIELD CONDITION 3: The expected number of moves is low, perform a dive
         elif expected_key(current) < lowest_expected:
