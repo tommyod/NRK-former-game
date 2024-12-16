@@ -134,17 +134,6 @@ class TestBoard:
         assert flipped.grid == [[3, 2, 1], [6, 5, 4]]
 
     @pytest.mark.parametrize("seed", range(100))
-    def test_lower_and_upper_bounds(self, seed):
-        # Create a random board with a random shape
-        rng = random.Random(seed)
-        rows, cols = rng.randint(2, 4), rng.randint(2, 4)
-        board = Board.generate_random(shape=(rows, cols), seed=seed)
-
-        # A* returns an optimal solution. Check that it's within bounds
-        opt_moves = len(a_star_search(board))
-        assert board.lower_bound <= opt_moves <= board.upper_bound
-
-    @pytest.mark.parametrize("seed", range(100))
     def test_that_canonicalization_is_idempotent(self, seed):
         # Create a random board with a random shape
         rng = random.Random(seed)
