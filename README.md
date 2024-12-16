@@ -107,24 +107,26 @@ A first heuristic we can try is to maximize cells cleared per move.
 ```
 
 The heuristic above looks at _what has worked so far_.
-We get better results if we look at _what will happen in the future_:
+We get better results if we look at _what will happen in the future_.
+Note that `num_moves` is [not an upper bound on the optimal solution length](https://github.com/tommyod/NRK-former-game/issues/17),
+but in practice it often works well (counterexamples are rare, so it's a good heuristic).
 
 ```pycon
 >>> def average(node):
-...     return (node.board.lower_bound + node.board.upper_bound) / 2
+...     return (node.board.lower_bound + node.board.num_moves) / 2
 >>> len(greedy_search(board, key=average))
 17
 
 ```
 
-A range on lower and upper bound like `[8, 12]` is probably better than `[6, 14]`
+A range like `[8, 12]` is probably better than `[6, 14]`
 even though the average is the same.
 We can break ties by adding more scores and returning a tuple:
 
 ```pycon
 >>> def modified_average(node):
-...     avg = (node.board.lower_bound + node.board.upper_bound) / 2
-...     range_ = node.board.upper_bound - node.board.lower_bound
+...     avg = (node.board.lower_bound + node.board.num_moves) / 2
+...     range_ = node.board.num_moves - node.board.lower_bound
 ...     cleared_per_move = node.cleared / len(node.moves) if node.moves else 0
 ...     return (avg, range_, -cleared_per_move)
 >>> len(greedy_search(board, key=modified_average))
