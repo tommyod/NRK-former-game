@@ -2,12 +2,11 @@
 Tests for the board.
 """
 
-import pytest
 import random
 
+import pytest
 
 from board import Board, CanonicalBoard
-from solvers import a_star_search
 
 
 class TestBoard:
