@@ -606,18 +606,17 @@ def heuristic_search(
 
     def dive_key(node):
         # This key is used for the "rollout phase", triggered when:
-        #  depth + current.board.upper_bound < shortest_path
-        return (node.board.upper_bound, node.board.lower_bound)
+        #  depth + current.board.num_moves < shortest_path
+        return (node.board.num_moves, node.board.lower_bound)
 
     def expected_key(node):
         # Expected number of moves to a solution
-        avg = (node.board.lower_bound + node.board.upper_bound) / 2
+        avg = (node.board.lower_bound + node.board.num_moves) / 2
         return len(node.moves) + avg
 
     def dive(node):
         # Perform a dive from this node, return the solution path from the node
         moves_rollout = greedy_search(node.board, key=dive_key)
-        assert len(moves_rollout) <= node.board.upper_bound
         # It could be that using the provided strategy is better, so try it
         moves_greedy = greedy_search(node.board, key=key)
         return min(moves_rollout, moves_greedy, key=len)
