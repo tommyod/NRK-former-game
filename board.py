@@ -112,36 +112,8 @@ Finally, all children (results of all valid clicks) can be retrieved:
     231
     <BLANKLINE>
 
-We can use the properties `lower_bound` and `upper_bound` to get bounds on the
-solution length. The lower bound never overestimates the solution length.
-It's a consistent heuristic when used in A* search. The upper bound represents
-an upper bound on the optimal solution, but it's possible to find longer
-solution paths. This diagram explains the situation:
-
-        shortest solution path                   longest solution path
-        <------------------------------------------------------------>
-        ^
-        |
-        optimal solution
-
-<------------------------------------->
-lower bound                 upper bound
-
-
-Here is a board where the optimal solution equals the upper bound:
-
-    >>> board = Board([[1, 1, 1],
-    ...                [2, 2, 2],
-    ...                [1, 1, 1],
-    ...                [2, 2, 2],
-    ...                [1, 1, 1],
-    ...                [2, 2, 2],
-    ...                [3, 1, 3],
-    ...                [1, 1, 1]])
-    >>> board.lower_bound
-    4
-    >>> board.upper_bound
-    9
+We can use the property `lower_bound` to get a bound on the solution length.
+It's a consistent heuristic when used in A* search.
 
 Here is a board where the optimal solution equals the lower bound:
 
@@ -150,17 +122,6 @@ Here is a board where the optimal solution equals the lower bound:
     ...                [3, 2, 2, 1]])
     >>> board.lower_bound
     3
-    >>> board.upper_bound
-    6
-
-Here is a board where the optimal solution (which is 3) is between the bounds:
-
-    >>> board = Board([[1, 2],
-    ...                [2, 1]])
-    >>> board.lower_bound
-    2
-    >>> board.upper_bound
-    4
 """
 
 from typing import List, Tuple
@@ -537,41 +498,44 @@ class Board:
         return sum(consecutive_groups(int_in_col) for int_in_col in integer_in_col)
 
     @property
-    def upper_bound(self):
-        """An upper bound on the optimal solution (minimum moves needed).
-
-        This heuristic counts the number of unique valid clicks, i.e., the
-        number of connected groups of the same color / integer. This seems
-        to be an upper bound on the optimal solution, but I have been unable
-        to prove it. If you can prove it, submit a PR and let me know :)
-
-        Below are two examples where it's not obvious how to attain the bound,
-        because we cannot simply start from the top. However, the bounds can
-        be attained here too.
+    def num_moves(self):
+        """The number of valid clicks (moves) available. This can be used as a
+        heuristic upper bound on the number of moves needed, but it is NOT
+        an upper bound in general.
 
         Examples
         --------
 
-        The upper bound cannot be realized by an algorithm that starts at
-        the top group. Here is a counterexample:
+        `num_moves` is NOT an upper bound on the optimal solution. GitHub user
+        @oystub provided a counterexample with a board that has 3 moves, but
+        requires a solution sequence of at least 4 clicks to solve:
 
-        >>> board = Board([[1, 1],
-        ...                [1, 3],
-        ...                [1, 1],
-        ...                [3, 3]])
-        >>> board.upper_bound  # Can be solved in 2 clicks
+        >>> board = Board([[2, 2, 2, 2, 2, 2, 2],
+        ...                [2, 1, 1, 1, 1, 1, 1],
+        ...                [2, 2, 2, 2, 2, 2, 1],
+        ...                [3, 3, 3, 3, 3, 2, 1],
+        ...                [3, 1, 1, 1, 1, 2, 1],
+        ...                [3, 1, 2, 2, 2, 2, 1],
+        ...                [3, 1, 1, 1, 1, 1, 1],
+        ...                [3, 3, 3, 3, 3, 3, 1],
+        ...                [1, 1, 1, 1, 1, 1, 1]])
+        >>> board.num_moves
         3
 
-        The upper bound cannot be realized by an algorithm that only makes
-        moves where the upper bound goes down by 1. Here is a counterexample:
+        Here is an example of a board where `num_moves` is 3, but all children
+        have >=3 `num_moves` too:
 
-        >>> board = Board([[4, 4, 4],
-        ...                [4, 2, 1],
-        ...                [4, 4, 2]])
-        >>> board.upper_bound  # Can be solved in 3 clicks
-        4
-        >>> print([child.upper_bound for _, child in board.children()])
-        [2, 4, 4, 4]
+        >>> board = Board([[0, 1, 1, 1, 1],
+        ...               [0, 2, 2, 2, 1],
+        ...               [2, 2, 3, 1, 1],
+        ...               [3, 3, 3, 1, 1]])
+        >>> board.num_moves
+        3
+        >>> for move, child in board.children():
+        ...     print(f"Move {move} gives upper bound: {child.num_moves}")
+        Move (0, 1) gives upper bound: 3
+        Move (1, 1) gives upper bound: 3
+        Move (2, 2) gives upper bound: 4
         """
         return len(self.clicks())
 
