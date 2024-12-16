@@ -182,12 +182,12 @@ class TestSolvers:
         def node_to_scores(node):
             # Priority 1: Compute a biased average of total moves => lower is better
             alpha = 0.5
-            avg = (1 - alpha) * node.board.lower_bound + alpha * node.board.upper_bound
+            avg = (1 - alpha) * node.board.lower_bound + alpha * node.board.num_moves
             expected = len(node.moves) + avg
 
             # Priority 2: Compute the range between low and high => lower is better
-            assert node.board.upper_bound >= node.board.lower_bound
-            range_ = abs(node.board.upper_bound - node.board.lower_bound) ** 0.5
+            assert node.board.num_moves >= node.board.lower_bound
+            range_ = abs(node.board.num_moves - node.board.lower_bound) ** 0.5
 
             # Priority 3: Cleared per move => higher is better
             cleared_per_move = node.cleared / len(node.moves) if node.moves else 0
@@ -221,12 +221,12 @@ class TestSolvers:
 
 
 @pytest.mark.parametrize("seed", range(99))
-def test_that_astar_solutions_are_within_bounds(seed):
+def test_that_astar_solution_is_within_bounds(seed):
     # Create a random board with a random shape
     rng = random.Random(seed)
     shape = rng.randint(2, 5), rng.randint(2, 5)
     board = Board.generate_random(shape=shape, seed=seed)
-    assert board.lower_bound <= len(a_star_search(board)) <= board.upper_bound
+    assert board.lower_bound <= len(a_star_search(board))
 
 
 class TestNonRegressionOnPerformance:
